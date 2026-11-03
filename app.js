@@ -1,7 +1,7 @@
 'use strict';
-/* EV Log 2.0 v0.2
+/* EV Log 2.0 v0.3
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
- * Store costs and garage in the existing "meta" store so v0.1 can still read its data.
+ * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
  */
 const DB_NAME = 'evlog2-local';
@@ -10,6 +10,7 @@ const STORE_CHARGES = 'charges';
 const STORE_META = 'meta';
 const EXPENSE_PREFIX = 'expense:';
 const GARAGE_KEY = 'garage:profile';
+const COMPARISON_KEY = 'comparison:settings';
 const BACKUP_FORMAT = 'ev-log-2';
 const PRICE_HINTS = { public:0.56, rapid:0.79, home:0.24, work:0 };
 const TYPE_NAMES = { public:'Публично AC', rapid:'Бързо DC', home:'Домашно', work:'Служебно / друго' };
@@ -42,11 +43,16 @@ let db;
 let charges = [];
 let expenses = [];
 let garage = emptyGarage();
+let comparison = defaultComparison();
+let comparisonStored = false;
 let chargeEditingId = null;
 let expenseEditingId = null;
 let toastTimeout;
 let installEvent = null;
 
+function defaultComparison() {
+  return {distanceMiles:100,efficiencyMiKwh:3.5,iceMpgUk:45,fuelPriceLitre:1.50,priceMode:'history',manualPriceKwh:0.56};
+}
 function emptyGarage() {
   return {make:'',model:'',year:null,registration:'',odometerMiles:null,notes:'',due:{mot:'',insurance:'',tax:'',service:''}};
 }
@@ -119,6 +125,9 @@ async function refresh() {
   charges = data.charges.sort(sortNewest);
   expenses = data.meta.filter(item => typeof item.key === 'string' && item.key.startsWith(EXPENSE_PREFIX) && item.value).map(item => item.value).sort(sortNewest);
   garage = data.meta.find(item => item.key === GARAGE_KEY)?.value || emptyGarage();
+  const savedComparison = data.meta.find(item => item.key === COMPARISON_KEY);
+  comparisonStored = !!savedComparison;
+  comparison = savedComparison ? validateComparison(savedComparison.value) : defaultComparison();
   renderAll();
 }
 function navigate(view) {
@@ -373,8 +382,160 @@ function renderGarage() {
     box.append(alert);
   });
 }
+/* Analytics never modifies charges, expenses or garage. All displays are derived from local records. */
+function validateComparison(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Невалидни настройки за сравнение.');
+  for (const [key,min,max] of [['distanceMiles',1,100000],['efficiencyMiKwh',0.1,15],['iceMpgUk',5,200],['fuelPriceLitre',0,10],['manualPriceKwh',0,10]]) {
+    if (!numeric(value[key]) || value[key] < min || value[key] > max) throw Error(`Невалидна настройка: ${key}.`);
+  }
+  if (!['history','manual'].includes(value.priceMode)) throw Error('Невалиден метод за цена на EV.');
+  return value;
+}
+function comparisonFromForm() {
+  const fieldNames = ['compare-distance','compare-efficiency','compare-mpg','compare-fuel-price','compare-manual-price'];
+  if (fieldNames.some(id => $(id).value.trim() === '')) throw Error('Попълни всички полета за сравнение.');
+  return validateComparison({
+    distanceMiles:Number($('compare-distance').value),
+    efficiencyMiKwh:Number($('compare-efficiency').value),
+    iceMpgUk:Number($('compare-mpg').value),
+    fuelPriceLitre:Number($('compare-fuel-price').value),
+    priceMode:$('compare-price-mode').value,
+    manualPriceKwh:Number($('compare-manual-price').value)
+  });
+}
+function loadComparisonForm() {
+  $('compare-distance').value=comparison.distanceMiles;
+  $('compare-efficiency').value=comparison.efficiencyMiKwh;
+  $('compare-mpg').value=comparison.iceMpgUk;
+  $('compare-fuel-price').value=comparison.fuelPriceLitre;
+  $('compare-price-mode').value=comparison.priceMode;
+  $('compare-manual-price').value=comparison.manualPriceKwh;
+  updateManualPriceVisibility();
+}
+function updateManualPriceVisibility() {
+  $('manual-price-field').hidden=$('compare-price-mode').value!=='manual';
+}
+function periodScope() {
+  const period=$('stats-period').value;
+  const now=today().slice(0,7);
+  const count=period==='all'?null:Number(period);
+  const first=count===null?'':localDate(new Date(new Date().getFullYear(),new Date().getMonth()-count+1,1)).slice(0,7);
+  const inPeriod=x=>count===null || (x.date.slice(0,7)>=first && x.date.slice(0,7)<=now);
+  const selectedCharges=charges.filter(inPeriod);
+  const selectedExpenses=expenses.filter(inPeriod);
+  let months=[];
+  if (count===null) {
+    months=[...new Set([...selectedCharges,...selectedExpenses].map(x=>x.date.slice(0,7)))].sort();
+    if(months.length>36)months=months.slice(-36);
+  } else {
+    for(let i=count-1;i>=0;i--) months.push(localDate(new Date(new Date().getFullYear(),new Date().getMonth()-i,1)).slice(0,7));
+  }
+  return {selectedCharges,selectedExpenses,months,period};
+}
+function energyFormat(kwh) {
+  return Number(kwh).toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:2})+' kWh';
+}
+function barChart(container,rows,maxValue,mode) {
+  container.replaceChildren();
+  if (!rows.length) {
+    container.append(element('p','small-note','Няма данни за избрания период.'));
+    return;
+  }
+  for (const row of rows) {
+    const entry=element('div','chart-row');
+    const label=element('span','chart-label',row.label);
+    const content=element('div','chart-content');
+    const track=element('div','chart-track');
+    if(mode==='cost') {
+      for(const [value,cls] of [[row.charging,'segment-charging'],[row.other,'segment-expense']]) {
+        const segment=element('div','chart-segment '+cls);
+        segment.style.width = maxValue>0 ? (100*value/maxValue)+'%' : '0%';
+        track.append(segment);
+      }
+      track.setAttribute('aria-label',`${row.label}: зареждане ${money(row.charging)}, други ${money(row.other)}`);
+      content.append(track,element('div','chart-value',`${money(row.charging+row.other)} · зареждане ${money(row.charging)} / други ${money(row.other)}`));
+    } else {
+      const segment=element('div','chart-segment segment-energy');
+      segment.style.width=maxValue>0 ? (100*row.kwh/maxValue)+'%' : '0%';
+      track.append(segment);
+      track.setAttribute('aria-label',`${row.label}: ${energyFormat(row.kwh)}`);
+      content.append(track,element('div','chart-value',energyFormat(row.kwh)));
+    }
+    entry.append(label,content);container.append(entry);
+  }
+}
+function renderTypeBreakdown(selectedCharges,totalKwh) {
+  const box=$('stats-type-bars');box.replaceChildren();
+  if (!selectedCharges.length) {box.append(element('p','small-note','Няма зареждания за този период.'));return;}
+  for (const [type,label] of Object.entries(TYPE_NAMES)) {
+    const total=selectedCharges.filter(x=>x.type===type).reduce((sum,x)=>sum+x.kwh,0);
+    if(total===0)continue;
+    const pct=totalKwh>0?total/totalKwh*100:0;
+    const entry=element('div','chart-row');
+    const line=element('div','chart-content');
+    const track=element('div','chart-track');
+    const segment=element('div','chart-segment segment-charging');segment.style.width=pct+'%';track.append(segment);
+    line.append(track,element('div','chart-value',`${energyFormat(total)} · ${pct.toFixed(1)}%`));
+    entry.append(element('span','chart-label',label),line);box.append(entry);
+  }
+}
+function renderComparison(config=comparison,scope=periodScope()) {
+  const box=$('comparison-result');box.replaceChildren();
+  const totalKwh=scope.selectedCharges.reduce((sum,x)=>sum+x.kwh,0);
+  const recorded=scope.selectedCharges.reduce((sum,x)=>sum+chargeTotal(x),0);
+  if (config.priceMode==='history' && totalKwh<=0) {
+    box.append(element('h2','','Няма база за EV цена'),element('p','','Няма записани зареждания през избрания период. Избери „Въведена от мен цена“ или друг период, за да направиш сравнение.'));
+    return;
+  }
+  const evPrice=config.priceMode==='history'?recorded/totalKwh:config.manualPriceKwh;
+  const evKwh=config.distanceMiles/config.efficiencyMiKwh;
+  const evCost=evKwh*evPrice;
+  const iceLitres=config.distanceMiles/config.iceMpgUk*4.54609;
+  const iceCost=iceLitres*config.fuelPriceLitre;
+  const difference=iceCost-evCost;
+  box.append(element('h2','','Резултат за '+config.distanceMiles.toLocaleString('en-GB')+' мили'));
+  const figures=element('div','compare-figures');
+  for (const [label,cost] of [['Електромобил',evCost],['Бензин / дизел',iceCost]]) {
+    const card=element('div','compare-figure');card.append(element('span','',label),element('strong','',money(cost)));figures.append(card);
+  }
+  box.append(figures);
+  const highlight=element('div','compare-highlight');
+  highlight.append(element('span','small-note','Разлика само за енергия / гориво'));
+  const delta=Math.abs(difference)<0.005?'Приблизително еднакъв разход':difference>0?`EV е по-евтин с ${money(difference)}`:`ICE е по-евтин с ${money(-difference)}`;
+  highlight.append(element('strong','',delta));
+  highlight.append(element('p','',`${energyFormat(evKwh)} × £${evPrice.toFixed(3)}/kWh · ${iceLitres.toFixed(2)} литра × ${money(config.fuelPriceLitre)}/л`));
+  highlight.append(element('p','',config.priceMode==='history'?'EV цената е претеглената средна от реално въведените зареждания за избрания период.':'EV цената е зададена ръчно в настройките.'));
+  box.append(highlight);
+}
+function renderStats() {
+  const scope=periodScope();
+  const cs=scope.selectedCharges,ex=scope.selectedExpenses;
+  const charging=cs.reduce((sum,x)=>sum+chargeTotal(x),0);
+  const extra=ex.reduce((sum,x)=>sum+x.amount,0);
+  const kwh=cs.reduce((sum,x)=>sum+x.kwh,0);
+  $('stats-charging').textContent=money(charging);
+  $('stats-other').textContent=money(extra);
+  $('stats-total').textContent=money(charging+extra);
+  $('stats-charge-count').textContent=`${cs.length} зареждания`;
+  $('stats-other-count').textContent=`${ex.length} разхода`;
+  $('stats-kwh').textContent=energyFormat(kwh);
+  $('stats-average-session').textContent=cs.length?`Средно: ${energyFormat(kwh/cs.length)}`:'Средно: —';
+  $('stats-average-price').textContent=kwh>0?'£'+(charging/kwh).toFixed(3):'—';
+  $('stats-session-cost').textContent=cs.length?money(charging/cs.length):'—';
+  const rows=scope.months.map(m=>({
+    label:new Intl.DateTimeFormat('bg-BG',{month:'short',year:'2-digit'}).format(new Date(m+'-01T12:00:00')),
+    charging:cs.filter(x=>x.date.startsWith(m)).reduce((sum,x)=>sum+chargeTotal(x),0),
+    other:ex.filter(x=>x.date.startsWith(m)).reduce((sum,x)=>sum+x.amount,0),
+    kwh:cs.filter(x=>x.date.startsWith(m)).reduce((sum,x)=>sum+x.kwh,0)
+  }));
+  barChart($('stats-cost-bars'),rows,Math.max(0,...rows.map(x=>x.charging+x.other)),'cost');
+  barChart($('stats-energy-bars'),rows,Math.max(0,...rows.map(x=>x.kwh)),'energy');
+  renderTypeBreakdown(cs,kwh);
+  renderComparison(comparison,scope);
+}
+
 function renderAll() {
-  renderHome();renderHistory();renderCosts();renderGarage();
+  renderHome();renderHistory();renderCosts();renderGarage();renderStats();
   $('backup-count').textContent=`В момента: ${charges.length} зареждания, ${expenses.length} други разхода${garageIsEmpty(garage)?', Garage е празен.':', Garage е попълнен.'}`;
 }
 function chargeSignature(x) {return [x.date,x.odometerMiles??'',x.type,x.kwh,x.pricePerKwh,x.station.trim().toLowerCase(),x.notes.trim().toLowerCase()].join('\u001f');}
@@ -384,7 +545,7 @@ function validateBackup(data) {
   if (data.charges.length>100000) throw Error('Прекалено много зареждания в архива.');
   const chargeIds=new Set();
   data.charges.forEach(x=>{validateCharge(x);if(chargeIds.has(x.id)) throw Error('Повтарящи се ID на зареждания в архива.');chargeIds.add(x.id);});
-  let importedCosts=[],importedGarage=null;
+  let importedCosts=[],importedGarage=null,importedComparison=null;
   if (data.version===2) {
     if (!Array.isArray(data.costs)) throw Error('Липсват разходите в архива v0.2.');
     if (data.costs.length>100000) throw Error('Прекалено много разходи в архива.');
@@ -392,12 +553,13 @@ function validateBackup(data) {
     data.costs.forEach(x=>{validateExpense(x);if(costIds.has(x.id)) throw Error('Повтарящи се ID на разходи в архива.');costIds.add(x.id);});
     importedCosts=data.costs;
     if (data.garage !== null && data.garage !== undefined) importedGarage=validateGarage(data.garage);
+    if (data.comparison !== null && data.comparison !== undefined) importedComparison=validateComparison(data.comparison);
   }
-  return {charges:data.charges,costs:importedCosts,garage:importedGarage};
+  return {charges:data.charges,costs:importedCosts,garage:importedGarage,comparison:importedComparison};
 }
 async function downloadBackup() {
   await refresh();
-  const payload={format:BACKUP_FORMAT,version:2,exportedAt:new Date().toISOString(),charges:charges.map(x=>({...x})),costs:expenses.map(x=>({...x})),garage:JSON.parse(JSON.stringify(garage))};
+  const payload={format:BACKUP_FORMAT,version:2,exportedAt:new Date().toISOString(),charges:charges.map(x=>({...x})),costs:expenses.map(x=>({...x})),garage:JSON.parse(JSON.stringify(garage)),comparison:{...comparison}};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=`EV-Log-2-full-backup-${today()}.json`;
@@ -425,19 +587,21 @@ async function importBackup(file) {
     if (!costIds.has(item.id) && !costFingerprints.has(sig)) {newCosts.push(item);costIds.add(item.id);costFingerprints.add(sig);}
   }
   const addGarage=incoming.garage && garageIsEmpty(garage) && !garageIsEmpty(incoming.garage);
+  const addComparison=!!incoming.comparison && !comparisonStored;
   const skippedCharges=incoming.charges.length-newCharges.length;
   const skippedCosts=incoming.costs.length-newCosts.length;
-  if (!newCharges.length && !newCosts.length && !addGarage) {
+  if (!newCharges.length && !newCosts.length && !addGarage && !addComparison) {
     notify(`Няма нови записи. Пропуснати: ${skippedCharges} зареждания и ${skippedCosts} разходи.`);return;
   }
-  if (!confirm(`Импорт от EV Log 2.0\n\nНови зареждания: ${newCharges.length} (пропуснати ${skippedCharges})\nНови разходи: ${newCosts.length} (пропуснати ${skippedCosts})\nGarage: ${addGarage?'ще се добави':'без промяна'}\n\nПродължаваме ли?`)) return;
+  if (!confirm(`Импорт от EV Log 2.0\n\nНови зареждания: ${newCharges.length} (пропуснати ${skippedCharges})\nНови разходи: ${newCosts.length} (пропуснати ${skippedCosts})\nGarage: ${addGarage?'ще се добави':'без промяна'}\nEV/ICE настройки: ${addComparison?'ще се добавят':'без промяна'}\n\nПродължаваме ли?`)) return;
   await transaction([STORE_CHARGES,STORE_META],tx=>{
     const cStore=tx.objectStore(STORE_CHARGES),mStore=tx.objectStore(STORE_META);
     newCharges.forEach(x=>cStore.add(x));
     newCosts.forEach(x=>mStore.add({key:EXPENSE_PREFIX+x.id,value:x}));
     if (addGarage) mStore.put({key:GARAGE_KEY,value:incoming.garage});
+    if (addComparison) mStore.put({key:COMPARISON_KEY,value:incoming.comparison});
   });
-  await refresh();loadGarageForm();
+  await refresh();loadGarageForm();loadComparisonForm();
   notify(`Импортирани: ${newCharges.length} зареждания, ${newCosts.length} разходи${addGarage?' и Garage':''}.`);
 }
 async function onRecordClick(event,kind) {
@@ -493,6 +657,16 @@ function attachEvents() {
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('costs-filter').addEventListener('change',renderCosts);
+  $('stats-period').addEventListener('change',renderStats);
+  $('compare-price-mode').addEventListener('change',()=>{updateManualPriceVisibility();try{renderComparison(comparisonFromForm());}catch(_){}});
+  $('comparison-form').addEventListener('input',()=>{try{renderComparison(comparisonFromForm());}catch(_){}});
+  $('comparison-form').addEventListener('submit',async event=>{
+    event.preventDefault();const b=$('save-comparison');
+    try {const value=comparisonFromForm();b.disabled=true;
+      await transaction([STORE_META],tx=>tx.objectStore(STORE_META).put({key:COMPARISON_KEY,value}));
+      await refresh();notify('Настройките за сравнение са запазени.');
+    } catch(error) {notify(error.message,true);}finally{b.disabled=false;}
+  });
   $('costs-list').addEventListener('click',event=>onRecordClick(event,'cost'));
   $('garage-form').addEventListener('submit',async event=>{
     event.preventDefault();const b=$('save-garage');
@@ -520,7 +694,7 @@ async function start() {
     if (!('indexedDB' in window)) throw Error('Браузърът не поддържа IndexedDB.');
     db=await openDb();
     db.onversionchange=()=>{db.close();notify('Базата е обновена в друг прозорец. Презареди страницата.',true);};
-    await refresh();resetChargeForm();resetExpenseForm();loadGarageForm();attachEvents();
+    await refresh();resetChargeForm();resetExpenseForm();loadGarageForm();loadComparisonForm();attachEvents();
     updatePwaStatus();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange',updatePwaStatus);

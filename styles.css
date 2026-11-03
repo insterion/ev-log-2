@@ -84,3 +84,35 @@ p{line-height:1.55}
 #toast.show{transform:translate(-50%,0)}#toast.error{background:#58313c;border-color:#a14c61}
 @media(min-width:680px){.bottom-nav{left:50%;transform:translateX(-50%);max-width:680px;border-left:1px solid var(--line);border-right:1px solid var(--line)}.shell{padding-left:24px;padding-right:24px}}
 @media(max-width:360px){.form-grid{grid-template-columns:1fr}.stat-card{padding:12px}.stat-card strong{font-size:20px}.brand-copy strong{font-size:17px}.version{display:none}}
+
+/* v0.3: analytics and EV/ICE comparison, mobile-first, no third-party charting. */
+.analytics-shortcut{border-color:#2c625a;background:linear-gradient(125deg,#17383b,#141f33)}
+.analytics-shortcut p{margin:0}
+.stats-detail{margin:16px 0 25px}
+.bar-chart{display:flex;flex-direction:column;gap:12px;margin-top:15px}
+.chart-legend{display:flex;flex-wrap:wrap;gap:16px;color:var(--muted);font-size:12px;margin:12px 0}
+.chart-legend span{display:flex;gap:6px;align-items:center}
+.legend-dot{display:inline-block;width:11px;height:11px;border-radius:3px}
+.charging-dot,.segment-charging{background:var(--accent)}
+.expense-dot,.segment-expense{background:#7a9df9}
+.segment-energy{background:#a0c1ff}
+.chart-row{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:center}
+.chart-label{font-size:12px;color:#c7d5ea;overflow-wrap:anywhere}
+.chart-content{min-width:0}
+.chart-track{height:13px;display:flex;width:100%;border-radius:7px;background:var(--surface2);overflow:hidden}
+.chart-segment{height:100%;min-width:0;flex-shrink:0}
+.chart-value{margin-top:4px;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.type-chart .chart-row{grid-template-columns:115px minmax(0,1fr)}
+.compare-form{padding-bottom:13px}
+.compare-form .action-large{margin-bottom:4px}
+.compare-form .field[hidden]{display:none}
+.result-panel{border-color:#2c625a;background:linear-gradient(145deg,#12373c,#141f33)}
+.compare-figures{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.compare-figure{border:1px solid var(--line);border-radius:12px;padding:13px;background:rgba(7,16,29,.35)}
+.compare-figure span{display:block;font-size:12px;color:var(--muted);margin-bottom:7px}
+.compare-figure strong{font-size:23px;letter-spacing:-.5px;overflow-wrap:anywhere}
+.compare-highlight{border-top:1px solid var(--line);padding-top:13px;margin-top:12px}
+.compare-highlight strong{display:block;color:var(--accent);font-size:20px;margin-top:3px}
+.panel .compare-highlight p{margin:6px 0 0}
+.compare-disclaimer{font-size:12px;color:var(--muted);line-height:1.55;padding:0 3px 20px}
+@media(max-width:390px){.nav-item small{font-size:9px}.nav-item{padding:6px 1px}.nav-item span{font-size:21px}.stats-detail .stat-card strong{font-size:19px}}

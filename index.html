@@ -19,7 +19,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v0.2</span>
+      <span class="version">v0.3</span>
     </header>
 
     <main id="main">
@@ -40,6 +40,7 @@
           <button id="quick-add" class="primary" type="button">＋ Зареждане</button>
           <button id="quick-expense" class="secondary" type="button">＋ Разход</button>
         </div>
+        <div class="panel analytics-shortcut"><div class="section-heading tight"><h2>📊 Статистика и EV/ICE</h2><button class="text-button" type="button" data-go="stats">Отвори →</button></div><p>Разходи по месеци, заредени kWh и сравнение с бензин/дизел.</p></div>
         <div class="section-heading"><h2>Последни зареждания</h2><button class="text-button" type="button" data-go="history">Виж всички →</button></div>
         <div id="recent-list" class="record-list"><p class="empty">Все още няма записи.</p></div>
         <div class="section-heading"><h2>Последни разходи</h2><button class="text-button" type="button" data-go="costs">Виж всички →</button></div>
@@ -142,17 +143,76 @@
         </form>
       </section>
 
+      <section class="view" id="view-stats" aria-labelledby="stats-title" hidden>
+        <p class="eyebrow">СТАТИСТИКА И СРАВНЕНИЯ</p><h1 id="stats-title">Анализи</h1>
+        <p class="muted">Статистиката е от твоите записани зареждания и разходи. Няма външни тарифи или сървъри.</p>
+        <label class="field">Период
+          <select id="stats-period">
+            <option value="3">Последните 3 месеца</option>
+            <option value="6" selected>Последните 6 месеца</option>
+            <option value="12">Последните 12 месеца</option>
+            <option value="all">Всички записи</option>
+          </select>
+        </label>
+        <div class="stats-grid stats-detail">
+          <div class="stat-card"><span>Зареждания</span><strong id="stats-charging">£0.00</strong><small id="stats-charge-count">0 зареждания</small></div>
+          <div class="stat-card"><span>Други разходи</span><strong id="stats-other">£0.00</strong><small id="stats-other-count">0 разхода</small></div>
+          <div class="stat-card total-stat"><span>Всички разходи</span><strong id="stats-total">£0.00</strong><small>Зареждане + поддръжка и други</small></div>
+          <div class="stat-card"><span>Заредено количество</span><strong id="stats-kwh">0 kWh</strong><small id="stats-average-session">Средно: —</small></div>
+          <div class="stat-card"><span>Средна цена / kWh</span><strong id="stats-average-price">—</strong><small>Претеглена по заредени kWh</small></div>
+          <div class="stat-card"><span>Зареждане на сесия</span><strong id="stats-session-cost">—</strong><small>Средна сума за зареждане</small></div>
+        </div>
+        <div class="panel">
+          <h2>Разходи по месеци</h2>
+          <p class="tiny">Показани са зарежданията (зелено) и другите разходи (синьо) отделно. При над 36 месеца графиката показва последните 36 месеца със записи, а общите суми включват всички.</p>
+          <div class="chart-legend"><span><i class="legend-dot charging-dot"></i>Зареждане</span><span><i class="legend-dot expense-dot"></i>Други</span></div>
+          <div id="stats-cost-bars" class="bar-chart" role="group" aria-label="Месечни разходи"></div>
+        </div>
+        <div class="panel">
+          <h2>Енергия по месеци</h2><p class="tiny">Колко kWh си записал като заредени за съответния месец.</p>
+          <div id="stats-energy-bars" class="bar-chart" role="group" aria-label="Месечно заредени kWh"></div>
+        </div>
+        <div class="panel">
+          <h2>Видове зареждане</h2><p class="tiny">Дял от заредените kWh за избрания период.</p>
+          <div id="stats-type-bars" class="bar-chart type-chart"></div>
+        </div>
+        <div class="section-heading"><h2>EV срещу бензин/дизел</h2></div>
+        <p class="muted">Сравнение на <strong>разходите за енергия/гориво</strong> при еднакъв пробег. Стойностите са прогноза по твоите настройки, не измерен реален разход на миля.</p>
+        <form id="comparison-form" class="panel compare-form" novalidate>
+          <h2>Моите настройки</h2>
+          <div class="form-grid">
+            <label class="field">Пробег (мили)<input id="compare-distance" type="number" inputmode="decimal" step="any" min="1" max="100000" required></label>
+            <label class="field">EV ефективност (mi/kWh)<input id="compare-efficiency" type="number" inputmode="decimal" step="any" min="0.1" max="15" required></label>
+            <label class="field">Бензин/дизел (UK mpg)<input id="compare-mpg" type="number" inputmode="decimal" step="any" min="5" max="200" required></label>
+            <label class="field">Гориво (£/литър)<input id="compare-fuel-price" type="number" inputmode="decimal" step="any" min="0" max="10" required></label>
+          </div>
+          <label class="field">Цена за EV зареждане
+            <select id="compare-price-mode">
+              <option value="history">Средната цена от избрания период</option>
+              <option value="manual">Въведена от мен цена</option>
+            </select>
+          </label>
+          <label class="field" id="manual-price-field" hidden>Ръчна цена (£/kWh)
+            <input id="compare-manual-price" type="number" inputmode="decimal" step="any" min="0" max="10" required>
+          </label>
+          <button class="primary action-large" type="submit" id="save-comparison">Запази настройките</button>
+          <p class="tiny">Началните стойности са примерни — коригирай ги според твоя автомобил, тарифа и сравнявания ICE автомобил.</p>
+        </form>
+        <div id="comparison-result" class="panel result-panel" aria-live="polite"></div>
+        <p class="tiny compare-disclaimer">Изчислението използва UK imperial gallon = 4.54609 литра. Не включва застраховки, обслужване, данъци, покупна цена, амортизация или други такси. Ако не всички зареждания са записани, средната цена може да е непредставителна.</p>
+      </section>
+
       <section class="view" id="view-data" aria-labelledby="data-title" hidden>
         <p class="eyebrow">СИГУРНОСТ НА ДАННИТЕ</p><h1 id="data-title">Данни и архив</h1>
         <div class="panel">
           <h2>💾 Резервно копие</h2>
-          <p>Изтегли <strong>един JSON файл</strong> с всички зареждания, разходи и Garage данни. Архивирай извън телефона (напр. във Files или Google Drive ръчно).</p>
+          <p>Изтегли <strong>един JSON файл</strong> с всички зареждания, разходи, Garage и настройки за сравнение. Архивирай извън телефона (напр. във Files или Google Drive ръчно).</p>
           <button id="export-backup" class="primary" type="button">Изтегли пълен JSON backup</button>
           <p class="tiny" id="backup-count">—</p>
         </div>
         <div class="panel">
           <h2>📥 Възстановяване</h2>
-          <p>Избери архив от EV Log 2.0 v0.1 или v0.2. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
+          <p>Избери архив от EV Log 2.0 v0.1, v0.2 или v0.3. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
           <label class="file-button" for="import-backup">Избери JSON файл</label>
           <input type="file" id="import-backup" accept=".json,application/json" class="visually-hidden">
           <p class="tiny" id="selected-file">Няма избран файл</p>
@@ -169,7 +229,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v0.2</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v0.3</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
       </section>
@@ -182,6 +242,7 @@
     <button class="nav-item" type="button" data-go="history"><span aria-hidden="true">▤</span><small>История</small></button>
     <button class="nav-item" type="button" data-go="costs"><span aria-hidden="true">£</span><small>Разходи</small></button>
     <button class="nav-item" type="button" data-go="garage"><span aria-hidden="true">🚙</span><small>Garage</small></button>
+    <button class="nav-item" type="button" data-go="stats"><span aria-hidden="true">▥</span><small>Анализ</small></button>
   </nav>
   <div id="toast" role="status" aria-live="polite"></div>
 </body>
