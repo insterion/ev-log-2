@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=180">
+  <link rel="stylesheet" href="./styles.css?v=190">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=180" defer></script>
+  <script src="./app.js?v=190" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v1.8.0</span>
+      <span class="version">v1.9.0</span>
     </header>
 
     <main id="main">
@@ -42,6 +42,30 @@
           <div class="stat-card total-stat"><span>Общо за месеца</span><strong id="month-all">£0.00</strong><small>Зареждания + други разходи</small></div>
           <div class="stat-card"><span>Средна цена</span><strong id="month-price">—</strong><small>£/kWh · <span id="month-count">0</span> зареждания</small></div>
         </div>
+        <section class="home-glance" aria-labelledby="home-glance-title">
+          <div class="section-heading"><h2 id="home-glance-title">С един поглед</h2></div>
+          <div class="glance-grid">
+            <article class="glance-card">
+              <div class="glance-heading"><span class="glance-icon" aria-hidden="true">⚡</span><h3>Последно зареждане</h3></div>
+              <strong id="glance-last-amount">—</strong>
+              <p id="glance-last-details" class="glance-detail" aria-live="polite">Няма зареждания.</p>
+              <button class="text-button" type="button" data-go="history">Виж историята →</button>
+            </article>
+            <article class="glance-card">
+              <div class="glance-heading"><span class="glance-icon" aria-hidden="true">⛽</span><h3>EV срещу примерен ICE</h3></div>
+              <strong id="glance-ice-difference">—</strong>
+              <p id="glance-ice-details" class="glance-detail" aria-live="polite">Изчисляване…</p>
+              <button class="text-button" type="button" data-go="stats">Настройки на сравнението →</button>
+            </article>
+            <article class="glance-card glance-due">
+              <div class="glance-heading"><span class="glance-icon" aria-hidden="true">📅</span><h3>Най-близък срок</h3></div>
+              <strong id="glance-due-status">—</strong>
+              <p id="glance-due-details" class="glance-detail" aria-live="polite">Зареждане…</p>
+              <button class="text-button" type="button" data-go="garage">Отвори Garage →</button>
+            </article>
+          </div>
+          <p class="tiny glance-disclaimer">ICE сравнението е само ориентировъчно за <strong>избрания пробег от настройките</strong>, а не доказателство за спестявания през месеца. Използва средната цена от зарежданията в разглеждания месец и предполагаеми EV/ICE показатели.</p>
+        </section>
         <div class="quick-grid">
           <button id="quick-add" class="primary" type="button">＋ Зареждане</button>
           <button id="quick-expense" class="secondary" type="button">＋ Разход</button>
@@ -424,7 +448,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v1.8.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v1.9.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>

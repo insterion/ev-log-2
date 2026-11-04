@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.8.0
+/* EV Log 2.0 v1.9.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -654,6 +654,73 @@ function moveOverviewMonth(delta) {
   overviewMonth=next;
   renderHome();
 }
+/* v1.9: concise dashboard — all values are derived, never stored.
+ * Comparison uses the selected month's *recorded average* electricity price, but
+ * the mileage and efficiency assumptions are from the saved ICE comparison form.
+ * It deliberately does NOT claim a measured saving for the selected month.
+ */
+function glanceComparison(monthCharges,settings) {
+  const totalKwh=monthCharges.reduce((sum,x)=>sum+x.kwh,0);
+  if(!Number.isFinite(totalKwh) || totalKwh<=0) return {status:'no-month-data'};
+  const amount=monthCharges.reduce((sum,x)=>sum+chargeTotal(x),0);
+  const distance=settings.distanceMiles;
+  const efficiency=settings.efficiencyMiKwh;
+  const mpg=settings.iceMpgUk;
+  const priceFuel=settings.fuelPriceLitre;
+  if(![distance,efficiency,mpg,priceFuel].every(Number.isFinite) || distance<=0 || efficiency<=0 || mpg<=0 || priceFuel<0)
+    return {status:'settings-error'};
+  const unitPrice=amount/totalKwh;
+  const evCost=distance/efficiency*unitPrice;
+  const iceCost=distance/mpg*4.54609*priceFuel;
+  if(![evCost,iceCost,unitPrice].every(Number.isFinite)) return {status:'settings-error'};
+  return {status:'ok',difference:iceCost-evCost,evCost,iceCost,distance,unitPrice};
+}
+function renderHomeGlance(monthCharges) {
+  const latest=charges[0];
+  $('glance-last-amount').textContent=latest?money(chargeTotal(latest)):'—';
+  $('glance-last-details').textContent=latest
+    ?`${fmtDate(latest.date)} · ${latest.kwh} kWh · ${TYPE_NAMES[latest.type]||'Зареждане'}${latest.station?' · '+latest.station:''}`
+    :'Няма записани зареждания. Добави първото от „Зареждане“. ';
+
+  const main=$('glance-ice-difference');
+  const detail=$('glance-ice-details');
+  main.classList.remove('positive','negative');
+  const estimate=glanceComparison(monthCharges,comparison);
+  if(estimate.status==='no-month-data') {
+    main.textContent='Няма данни';
+    detail.textContent='Няма зареждания през избрания месец, от които да изчислим средна цена. Избери друг месец.';
+  } else if(estimate.status!=='ok') {
+    main.textContent='—';
+    detail.textContent='Провери настройките за EV/ICE сравнението в „Анализ“.';
+  } else {
+    const diff=estimate.difference;
+    if(Math.abs(diff)<0.005) {
+      main.textContent='≈ £0.00 разлика';
+    } else if(diff>0) {
+      main.textContent=`EV: −${money(diff)}`;
+      main.classList.add('positive');
+    } else {
+      main.textContent=`EV: +${money(-diff)}`;
+      main.classList.add('negative');
+    }
+    detail.textContent=`Пример за ${estimate.distance.toLocaleString('en-GB')} mi: EV ${money(estimate.evCost)} · ICE ${money(estimate.iceCost)}. Средна цена за ${monthName(overviewMonth)}: £${estimate.unitPrice.toFixed(3)}/kWh. Не са реално измерени месечни спестявания.`;
+  }
+
+  const due=garageDueItems()[0];
+  const dueCard=document.querySelector('.glance-due');
+  dueCard.classList.remove('is-near','is-overdue');
+  if(!due) {
+    $('glance-due-status').textContent='Няма зададен срок';
+    $('glance-due-details').textContent='Попълни MOT, insurance, tax или service в Garage.';
+  } else {
+    const view=duePresentation(due);
+    $('glance-due-status').textContent=view.status;
+    $('glance-due-details').textContent=view.label;
+    if(view.level==='near') dueCard.classList.add('is-near');
+    if(view.level==='expired') dueCard.classList.add('is-overdue');
+  }
+}
+
 function renderHome() {
   const current=overviewMonth;
   const monthCharges=charges.filter(x=>x.date.slice(0,7)===current);
@@ -671,6 +738,7 @@ function renderHome() {
   $('month-all').textContent=money(charging+cost);
   $('month-price').textContent=kwh>0?money(charging/kwh):'—';
   $('month-count').textContent=String(monthCharges.length);
+  renderHomeGlance(monthCharges);
   renderList($('recent-list'),charges.slice(0,3),chargeCard,false,'Все още няма зареждания.');
   renderList($('recent-costs'),expenses.slice(0,2),expenseCard,false,'Все още няма други разходи.');
   renderHomeReminders();

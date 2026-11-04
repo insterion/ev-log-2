@@ -313,3 +313,23 @@ p{line-height:1.55}
 .personal-tariff-row .tariff-actions{display:flex;flex-direction:column;gap:6px}
 .personal-tariff-row .tariff-actions button{min-height:34px;padding:7px 9px;font-size:12px;white-space:nowrap}
 @media(max-width:360px){.personal-tariff-shortcuts{grid-template-columns:1fr}}
+
+/* v1.9: one-glance home summary (derived only; no extra storage) */
+.home-glance{margin:20px 0 8px}
+.home-glance>.section-heading{margin:0 0 12px}
+.glance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.glance-card{display:flex;flex-direction:column;gap:9px;border:1px solid var(--line);background:linear-gradient(145deg,#17283c,#122034);border-radius:16px;padding:15px;min-width:0}
+.glance-heading{display:flex;align-items:center;gap:7px;min-width:0}
+.glance-heading h3{font-size:13px;line-height:1.4;margin:0;color:#d1dff0;overflow-wrap:anywhere}
+.glance-icon{font-size:17px;flex-shrink:0}
+.glance-card>strong{font-size:clamp(18px,4.8vw,25px);line-height:1.24;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.glance-card>strong.positive{color:var(--accent)}
+.glance-card>strong.negative{color:#ffb7a0}
+.glance-detail{color:var(--muted);font-size:12px;line-height:1.5;margin:0;flex:1;overflow-wrap:anywhere}
+.glance-card .text-button{align-self:flex-start;line-height:1.4;text-align:left;margin-top:3px}
+.glance-due{grid-column:1/-1}
+.glance-due.is-near{border-color:#b88c38;background:#302918}
+.glance-due.is-overdue{border-color:#b25c6b;background:#371e2b}
+.home-glance .glance-disclaimer{color:var(--muted);font-size:11px;line-height:1.55;margin:11px 1px 4px}
+@media(min-width:560px){.glance-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.glance-due{grid-column:auto}}
+@media(max-width:370px){.glance-grid{grid-template-columns:1fr}.glance-due{grid-column:auto}}
