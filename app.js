@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.9.0
+/* EV Log 2.0 v2.0.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -54,6 +54,9 @@ let chargeEditingId = null;
 let suggestedTariff = null;
 let expenseEditingId = null;
 let toastTimeout;
+let currentView = 'home';
+let garageFormSnapshot = null;
+let hadServiceWorkerController = false;
 let installEvent = null;
 // Dashboard month selection is UI-only and is not stored in IndexedDB.
 let overviewMonth = today().slice(0,7);
@@ -256,19 +259,58 @@ async function refresh() {
   renderChargeHelpers();
   renderPersonalTariffs();
 }
-function navigate(view) {
+/* v2.0: same-page view history makes the Android Back button useful.
+   Hashes affect navigation only; never touch IndexedDB or backup data. */
+const VALID_VIEWS = new Set(['home','charge','history','costs','garage','stats','data']);
+function viewFromUrl() {
+  let view='';
+  try {view=decodeURIComponent(location.hash.replace(/^#/,''));} catch (_) {return 'home';}
+  return VALID_VIEWS.has(view) ? view : 'home';
+}
+function navigate(view, options={}) {
+  if(!VALID_VIEWS.has(view)) return;
+  if(!options.fromHistory && currentView!==view) {
+    const url=new URL(location.href);
+    url.hash=view==='home' ? '' : view;
+    history.pushState({evLogView:view},'',url);
+  }
+  currentView=view;
   document.querySelectorAll('.view').forEach(section => {
-    const active = section.id === `view-${view}`;
-    section.hidden = !active;
+    const active=section.id===`view-${view}`;
+    section.hidden=!active;
     section.classList.toggle('active',active);
   });
   document.querySelectorAll('.nav-item').forEach(button => {
-    const active = button.dataset.go === view;
+    const active=button.dataset.go===view;
     button.classList.toggle('active',active);
-    if (active) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
+    if(active) button.setAttribute('aria-current','page');
+    else button.removeAttribute('aria-current');
   });
   window.scrollTo(0,0);
+  updateScrollTop();
 }
+function updateScrollTop() {
+  const button=$('scroll-top');
+  if(button) button.hidden=window.scrollY<650;
+}
+function updateConnectionStatus() {
+  const status=$('connection-status');
+  if(status) status.hidden=navigator.onLine !== false;
+}
+function showUpdateNotice() {
+  const notice=$('update-banner');
+  if(notice) notice.hidden=false;
+}
+/* Garage values are never silently overwritten when the app returns
+   from another Android app or the file picker. */
+function garageFormValues() {
+  const form=$('garage-form');
+  return form ? JSON.stringify([...form.querySelectorAll('input,textarea,select')].map(el=>el.value)) : '';
+}
+function garageFormHasUnsavedChanges() {
+  return garageFormSnapshot!==null && garageFormValues()!==garageFormSnapshot;
+}
+
 function validateCharge(raw) {
   if (!raw || typeof raw !== 'object') throw Error('Невалидно зареждане.');
   if (!dateValid(raw.date)) throw Error('Въведи валидна дата за зареждането.');
@@ -520,6 +562,7 @@ function loadGarageForm() {
   $('cabin-filter-date').value=extras.cabinFilterDate;
   $('wipers-date').value=extras.wipersDate;
   $('service-next-odo').value=extras.nextServiceOdometerMiles ?? '';
+  garageFormSnapshot=garageFormValues();
 }
 /* v0.8 — derived shortcuts. No new IndexedDB stores or settings. */
 function recentStationPresets(items=charges,limit=8) {
@@ -1915,6 +1958,20 @@ function updatePwaStatus() {
 }
 function attachEvents() {
   document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.go)));
+  document.querySelectorAll('[data-jump]').forEach(button=>button.addEventListener('click',()=>{
+    const target=$(button.dataset.jump);
+    if(target && !target.closest('.view[hidden]')) target.scrollIntoView({behavior:'smooth',block:'start'});
+  }));
+  $('scroll-top').addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+  window.addEventListener('scroll',updateScrollTop,{passive:true});
+  window.addEventListener('popstate',()=>navigate(viewFromUrl(),{fromHistory:true}));
+  window.addEventListener('online',updateConnectionStatus);
+  window.addEventListener('offline',updateConnectionStatus);
+  $('update-reload').addEventListener('click',()=>{
+    if(!confirm('Ако имаш незаписани данни във формите, те може да се загубят при презареждане. Продължи?')) return;
+    location.reload();
+  });
+  $('update-dismiss').addEventListener('click',()=>{$('update-banner').hidden=true;});
   $('quick-add').addEventListener('click',()=>{resetChargeForm();navigate('charge');});
   $('quick-expense').addEventListener('click',()=>openExpenseForm());
   $('month-prev').addEventListener('click',()=>moveOverviewMonth(-1));
@@ -2057,7 +2114,11 @@ function attachEvents() {
   });
   window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();installEvent=event;updatePwaStatus();});
   window.addEventListener('appinstalled',()=>{installEvent=null;updatePwaStatus();notify('Приложението е инсталирано.');});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh().then(loadGarageForm).catch(e=>notify(e.message,true));});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)return;
+    const wasEditingGarage=garageFormHasUnsavedChanges();
+    refresh().then(()=>{if(!wasEditingGarage)loadGarageForm();}).catch(e=>notify(e.message,true));
+  });
 }
 async function start() {
   try {
@@ -2065,10 +2126,17 @@ async function start() {
     db=await openDb();
     db.onversionchange=()=>{db.close();notify('Базата е обновена в друг прозорец. Презареди страницата.',true);};
     await refresh();resetChargeForm();resetExpenseForm();loadGarageForm();loadComparisonForm();attachEvents();
+    navigate(viewFromUrl(),{fromHistory:true});
+    updateConnectionStatus();
     verifyLegacyModule();
     updatePwaStatus();
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange',updatePwaStatus);
+      hadServiceWorkerController=!!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{
+        updatePwaStatus();
+        if(hadServiceWorkerController) showUpdateNotice();
+        hadServiceWorkerController=true;
+      });
       try {await navigator.serviceWorker.register('./sw.js',{scope:'./'});}
       catch(error){console.warn('Service Worker:',error);notify('Offline режимът не можа да се активира.',true);}
       updatePwaStatus();
