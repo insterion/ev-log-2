@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.4
+/* EV Log 2.0 v0.4.1
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -672,6 +672,7 @@ function renderLegacyPreview() {
       const box=element('div','legacy-record');
       box.append(element('strong','',legacyDisplay(item)));
       box.append(element('small','',`${item.source==='old-json'?'Първо приложение (JSON)':item.source==='old-csv'?'Първо приложение (CSV)':'Второ приложение (CSV)'} · запис ${item.line}`));
+      box.append(element('small','',item.kind==='charge'?`Тип: ${TYPE_NAMES[item.record.type] || item.record.type}`:`За автомобил: ${TARGET_NAMES[item.record.target] || item.record.target}`));
       box.append(element('small','',item.record.notes ? `Бележка: ${item.record.notes}` : 'Без бележка'));
       if (item.status!=='new')box.append(element('small','legacy-warning',item.reason));
       for(const warning of item.warnings)box.append(element('small','legacy-warning','⚠ '+warning));

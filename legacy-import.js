@@ -22,11 +22,15 @@
     return n;
   }
   function type(raw, warnings) {
-    const t=noteText(raw).toLowerCase().replace(/[_\s]+/g,'-');
-    if (['public','public-ac','ac','public-xp','publicxp'].includes(t)) return 'public';
-    if (['fast','rapid','rapid-dc','dc','fast-dc','rapid-charging'].includes(t)) return 'rapid';
-    if (['home','home-xp','homexp'].includes(t)) return 'home';
-    if (['work','free','other','workplace'].includes(t)) return 'work';
+    // EV Log Cloud exports the *display label*, not necessarily the internal code.
+    // Examples: "Домашно (Home)", "Публично (0.56)", "Бързо (0.79)", "Служебно (0.00)".
+    // Keep unknown types as manual-review warnings; never silently assume AC.
+    const rawType=noteText(raw).toLowerCase().replace(/[‐‑–—_]/g,'-').replace(/\s+/g,' ').trim();
+    const t=rawType.replace(/ /g,'-');
+    if (['home','home-xp','homexp'].includes(t) || rawType.startsWith('домашно') || rawType.startsWith('home (')) return 'home';
+    if (['public','public-ac','ac','public-xp','publicxp'].includes(t) || rawType.startsWith('публично') || rawType.startsWith('public (')) return 'public';
+    if (['fast','rapid','rapid-dc','dc','fast-dc','rapid-charging'].includes(t) || rawType.startsWith('бързо') || rawType.startsWith('rapid (') || rawType.startsWith('fast (')) return 'rapid';
+    if (['work','free','other','workplace'].includes(t) || rawType.startsWith('служебно') || rawType.startsWith('work (')) return 'work';
     warnings.push(`Неизвестен тип „${raw}“ – провери го след импорта (временно: публично AC).`);
     return 'public';
   }

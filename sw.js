@@ -1,6 +1,6 @@
 'use strict';
-// EV Log 2.0 v0.4 — offline files only; local IndexedDB is never cached or sent online.
-const CACHE_NAME = 'ev-log-2-shell-v04';
+// EV Log 2.0 v0.4.1 — offline files only; local IndexedDB is never cached or sent online.
+const CACHE_NAME = 'ev-log-2-shell-v041';
 const PREFIX = 'ev-log-2-shell-';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './legacy-import.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
