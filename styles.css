@@ -229,3 +229,9 @@ p{line-height:1.55}
 .charge-entry-warnings{border:1px solid #ad873c;background:#302919;color:#ffe2a4;border-radius:11px;padding:12px 14px;margin:12px 0;font-size:12px;line-height:1.5}
 .charge-entry-warnings strong{display:block;margin:0 0 6px;font-size:13px}
 .charge-entry-warnings p{margin:4px 0}
+
+/* v1.3 — verified portable JSON backups and phone-transfer guide. */
+.backup-export-status{border-left:3px solid #359b88;padding:9px 10px;background:#122b31;border-radius:0 8px 8px 0;line-height:1.55}
+.transfer-guide ol{padding-left:23px;margin:10px 0 14px;line-height:1.65}
+.transfer-guide li{padding:4px 0;font-size:14px}
+#share-backup[hidden]{display:none}

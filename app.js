@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.2.0
+/* EV Log 2.0 v1.3.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -903,15 +903,74 @@ function validateBackup(data) {
   }
   return {charges:data.charges,costs:importedCosts,garage:importedGarage,comparison:importedComparison};
 }
-async function downloadBackup() {
+/* v1.3: SHA-256 detects accidental changes to exported archives.
+   The existing ev-log-2 version:2 format is preserved; older readers ignore
+   the optional integrity field. This is NOT a digital signature or password. */
+const INTEGRITY_FIELDS = ['format','version','exportedAt','charges','costs','garage','comparison'];
+function canonicalJson(value) {
+  if (value === null || typeof value !== 'object') {
+    const out=JSON.stringify(value);
+    if (out===undefined) throw Error('Невалидна стойност за архивиране.');
+    return out;
+  }
+  if (Array.isArray(value)) return '['+value.map(v=>canonicalJson(v===undefined?null:v)).join(',')+']';
+  return '{'+Object.keys(value).filter(k=>value[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+canonicalJson(value[k])).join(',')+'}';
+}
+async function archiveHash(payload) {
+  if (!globalThis.crypto?.subtle || typeof TextEncoder==='undefined') throw Error('Браузърът не поддържа SHA-256. Отвори приложението през HTTPS в Chrome.');
+  const covered=Object.fromEntries(INTEGRITY_FIELDS.map(key=>[key,payload[key]]));
+  const encoded=new TextEncoder().encode(canonicalJson(covered));
+  const result=await crypto.subtle.digest('SHA-256',encoded);
+  return Array.from(new Uint8Array(result),b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function verifyArchiveHash(payload) {
+  if (!Object.hasOwn(payload,'integrity')) return {verified:false,description:'Стар архив без SHA-256 — формата и записите са проверени, но целостта не може да се потвърди криптографски.'};
+  const tag=payload.integrity;
+  if (!tag || tag.algorithm!=='SHA-256' || typeof tag.hex!=='string' || !/^[0-9a-f]{64}$/.test(tag.hex)) {
+    throw Error('Невалидна контролна сума SHA-256 в архива. Не са внесени данни.');
+  }
+  const calculated=await archiveHash(payload);
+  if (calculated!==tag.hex) throw Error('⚠ SHA-256 проверката не съвпада. Архивът може да е повреден или променен. Нищо не е добавено.');
+  return {verified:true,description:'✅ SHA-256 съвпада: данните са съгласувани с контролната сума в архива (не доказва произхода му).'};
+}
+function backupFilename() {
+  const d=new Date();
+  const time=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join('');
+  return `EV-Log-2-full-backup-${localDate(d)}-${time}.json`;
+}
+async function makeBackupFile() {
   await refresh();
   const payload={format:BACKUP_FORMAT,version:2,exportedAt:new Date().toISOString(),charges:charges.map(x=>({...x})),costs:expenses.map(x=>({...x})),garage:JSON.parse(JSON.stringify(garage)),comparison:{...comparison}};
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=`EV-Log-2-full-backup-${today()}.json`;
+  payload.integrity={algorithm:'SHA-256',hex:await archiveHash(payload)};
+  const name=backupFilename();
+  const json=JSON.stringify(payload,null,2);
+  return new File([json],name,{type:'application/json'});
+}
+async function downloadBackup() {
+  const file=await makeBackupFile();
+  const url=URL.createObjectURL(file);
+  const a=document.createElement('a');a.href=url;a.download=file.name;
   document.body.append(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
-  notify('Архивът е подготвен. Провери Downloads и го запази на безопасно място.');
+  $('backup-export-status').textContent='Архивът '+file.name+' е подготвен с SHA-256. Провери дали е записан в Downloads. Избери го от „Възстановяване“, за да провериш файла.';
+  notify('Архивът е подготвен. Провери Downloads и избери файла за проверка.');
+}
+function supportsFileSharing() {
+  if (typeof File==='undefined' || typeof navigator.share!=='function' || typeof navigator.canShare!=='function') return false;
+  try {return navigator.canShare({files:[new File(['test'],'evlog-test.json',{type:'application/json'})]});}
+  catch (_) {return false;}
+}
+async function shareBackup() {
+  if (!supportsFileSharing()) throw Error('Android споделяне на файл не е достъпно тук. Използвай „Изтегли“ и сподели файла от Downloads.');
+  const file=await makeBackupFile();
+  // Android share sheet is user-controlled. No upload is made by the app itself.
+  try {
+    await navigator.share({files:[file],title:'EV Log 2.0 — архив'});
+    $('backup-export-status').textContent='Изпратен е файл за споделяне. Провери, че си го запазил на избраното място. Не го публикувай в GitHub.';
+  } catch (error) {
+    if (error.name==='AbortError') {notify('Споделянето е отменено. Няма промяна в данните.');return;}
+    throw error;
+  }
 }
 /* v1.0: explicit, read-only preview before full JSON backup restore.
    Format, signatures, original records and database version are unchanged. */
@@ -965,10 +1024,12 @@ function clearBackupPreview() {
   $('backup-preview-details').replaceChildren();
   $('selected-file').textContent='Няма избран файл';
 }
-function renderBackupPreview(plan,filename,exportedAt='') {
+function renderBackupPreview(plan,filename,exportedAt='',integrityInfo=null,incoming=null) {
   const target=$('backup-preview-details');target.replaceChildren();
   const line=(s,warn=false)=>target.append(element('div',warn?'backup-preview-line warning':'backup-preview-line',s));
   line(`Файл: ${filename}`);
+  if (integrityInfo) line(integrityInfo.description,!integrityInfo.verified);
+  if (incoming) line(`В архива: ${incoming.charges.length} зареждания, ${incoming.costs.length} разхода · Garage: ${incoming.garage?'включен':'липсва'} · EV/ICE: ${incoming.comparison?'включени':'липсват'}`);
   if (exportedAt) {
     const stamp=new Date(exportedAt);
     if (!Number.isNaN(stamp.getTime())) line(`Дата на архива: ${stamp.toLocaleString('bg-BG')}`);
@@ -991,11 +1052,12 @@ async function previewBackupFile(file) {
   let obj;
   try {obj=JSON.parse(await file.text());} catch (_) {throw Error('Файлът не е валиден JSON.');}
   const incoming=validateBackup(obj);
+  const integrityInfo=await verifyArchiveHash(obj);
   await refresh();
   const plan=planFullBackup(incoming);
-  pendingBackup={incoming,filename:file.name,exportedAt:obj.exportedAt || ''};
+  pendingBackup={incoming,filename:file.name,exportedAt:obj.exportedAt || '',integrityInfo};
   backupPlanShown=planIdentity(plan);
-  renderBackupPreview(plan,file.name,pendingBackup.exportedAt);
+  renderBackupPreview(plan,file.name,pendingBackup.exportedAt,integrityInfo,incoming);
   notify('Архивът е проверен. Нищо не е добавено или изтрито.');
 }
 async function commitFullBackup() {
@@ -1005,7 +1067,7 @@ async function commitFullBackup() {
   if (planIdentity(plan)!==backupPlanShown) {
     backupPlanShown=planIdentity(plan);
     $('backup-ack').checked=false;
-    renderBackupPreview(plan,pendingBackup.filename,pendingBackup.exportedAt);
+    renderBackupPreview(plan,pendingBackup.filename,pendingBackup.exportedAt,pendingBackup.integrityInfo,pendingBackup.incoming);
     throw Error('Данните са се променили след прегледа. Провери новите бройки и потвърди отново.');
   }
   if (!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison)) {
@@ -1452,6 +1514,8 @@ function attachEvents() {
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('export-backup').addEventListener('click',()=>downloadBackup().catch(e=>notify(e.message,true)));
+  $('share-backup').hidden=!supportsFileSharing();
+  $('share-backup').addEventListener('click',()=>shareBackup().catch(e=>notify(e.message,true)));
   $('audit-run').addEventListener('click',runAudit);
   $('export-charges-csv').addEventListener('click',()=>exportAuditCsv('charge'));
   $('export-costs-csv').addEventListener('click',()=>exportAuditCsv('cost'));

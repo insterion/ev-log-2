@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=120">
+  <link rel="stylesheet" href="./styles.css?v=130">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=120" defer></script>
+  <script src="./app.js?v=130" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v1.2.0</span>
+      <span class="version">v1.3.0</span>
     </header>
 
     <main id="main">
@@ -282,8 +282,11 @@
         <div class="panel">
           <h2>💾 Резервно копие</h2>
           <p>Изтегли <strong>един JSON файл</strong> с всички зареждания, разходи, Garage и настройки за сравнение. Архивирай извън телефона (напр. във Files или Google Drive ръчно).</p>
-          <button id="export-backup" class="primary" type="button">Изтегли пълен JSON backup</button>
+          <button id="export-backup" class="primary backup-action" type="button">⬇ Изтегли пълен JSON backup</button>
+          <button id="share-backup" class="secondary backup-action" type="button" hidden>↗ Сподели архива чрез Android</button>
           <p class="tiny" id="backup-count">—</p>
+          <p class="backup-export-status tiny" id="backup-export-status" role="status" aria-live="polite">Новите архиви включват SHA-256 проверка на целостта. Винаги провери, че файлът е записан в Downloads или друго избрано място.</p>
+          <p class="tiny">🔒 Архивът може да съдържа регистрация, VIN, бележки и история на разходите. Не го качвай в публичен GitHub repository.</p>
         </div>
         <div class="panel audit-panel" id="audit-panel">
           <h2>🔍 Проверка на обединените записи</h2>
@@ -301,7 +304,8 @@
         </div>
         <div class="panel">
           <h2>📥 Възстановяване</h2>
-          <p>Провери JSON архива <strong>без да променяш нищо</strong>. Ще видиш кои записи са нови, повторени или имат конфликт с вече запазените. Само след твое изрично потвърждение се добавят новите записи.</p>
+          <p>Провери JSON архива <strong>без да променяш нищо</strong>. За архивите от v1.3+ приложението първо проверява SHA-256. Старите архиви също се приемат, но нямат криптографска проверка за повреда.</p>
+          <p class="tiny">Ще видиш съдържанието, новите записи, повторенията и конфликтите. Нищо няма да се запише, докато не потвърдиш.</p>
           <label class="file-button" for="import-backup">📂 Избери JSON архив за проверка</label>
           <input type="file" id="import-backup" accept=".json,application/json" class="visually-hidden">
           <p class="tiny" id="selected-file" aria-live="polite">Няма избран файл</p>
@@ -313,6 +317,16 @@
             <button type="button" class="primary backup-action" id="backup-commit" disabled>Добави новите записи</button>
             <button type="button" class="secondary backup-action" id="backup-cancel">Откажи прегледа</button>
           </div>
+        </div>
+        <div class="panel transfer-guide">
+          <h2>📱 Смяна на телефон — 4 стъпки</h2>
+          <ol>
+            <li>На стария телефон изтегли пълен JSON архив и <strong>провери, че е записан</strong>.</li>
+            <li>Прехвърли файла чрез Android Quick Share, USB или ръчно в предпочитано защитено хранилище. Приложението не го изпраща автоматично никъде.</li>
+            <li>На новия телефон отвори същия адрес на EV Log в Chrome, после <strong>Данни → Възстановяване</strong> и избери файла.</li>
+            <li>Провери контролна сума, брой записи и Garage, потвърди добавянето, след което направи нов backup.</li>
+          </ol>
+          <p class="tiny">Самото отваряне на сайта на нов телефон не прехвърля данните — те са локални за всеки браузър.</p>
         </div>
         <div class="panel">
           <h2>📲 Инсталиране като PWA</h2>
@@ -347,7 +361,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v1.0.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v1.3.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
