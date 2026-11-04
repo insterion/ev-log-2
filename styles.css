@@ -280,3 +280,17 @@ p{line-height:1.55}
 .actual-costs-export{width:100%;min-height:46px;margin:8px 0 10px}
 .expense-fuel-help{padding:8px 10px;background:#132d34;border-radius:8px;line-height:1.55}
 @media(max-width:375px){.actual-vehicle-grid{grid-template-columns:1fr}}
+
+/* v1.7: favourites and clearer comparison, no additional external libraries. */
+.station-shortcut-row{display:flex;gap:5px;align-items:stretch;min-width:0}
+.station-shortcut-row .station-shortcut{flex:1;min-width:0;padding:10px}
+.favorite-toggle{width:40px;min-width:40px;border-radius:10px;background:#21344c;border:1px solid #477385;color:#dbeaf2;font-size:23px;line-height:1}
+.favorite-toggle[aria-pressed="true"]{color:#ffe391;border-color:#ac9354;background:#403b2b}
+.compare-per-mile{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:14px}
+.compare-per-mile div{background:#142a37;border:1px solid #36606c;border-radius:10px;padding:11px}
+.compare-per-mile span{display:block;color:var(--muted);font-size:12px}
+.compare-per-mile strong{display:block;font-size:18px;margin-top:4px;color:#e6f8f0}
+.compare-explainer{font-size:12px;line-height:1.55;color:var(--muted);margin-top:12px}
+@media(max-width:360px){.favorite-toggle{min-width:38px;width:38px}}
+
+.actual-vehicle-grid.single-vehicle{grid-template-columns:1fr}

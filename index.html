@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=160">
+  <link rel="stylesheet" href="./styles.css?v=170">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=160" defer></script>
+  <script src="./app.js?v=170" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v1.6.0</span>
+      <span class="version">v1.7.0</span>
     </header>
 
     <main id="main">
@@ -39,7 +39,7 @@
         <div class="stats-grid">
           <div class="stat-card"><span>Зареждания (£)</span><strong id="month-cost">£0.00</strong><small id="month-kwh">0 kWh</small></div>
           <div class="stat-card"><span>Други разходи (£)</span><strong id="month-expense">£0.00</strong><small id="month-expense-count">0 записа</small></div>
-          <div class="stat-card total-stat"><span>Общо за месеца</span><strong id="month-all">£0.00</strong><small>Зареждания + разходи за всички автомобили</small></div>
+          <div class="stat-card total-stat"><span>Общо за месеца</span><strong id="month-all">£0.00</strong><small>Зареждания + други разходи</small></div>
           <div class="stat-card"><span>Средна цена</span><strong id="month-price">—</strong><small>£/kWh · <span id="month-count">0</span> зареждания</small></div>
         </div>
         <div class="quick-grid">
@@ -47,8 +47,8 @@
           <button id="quick-expense" class="secondary" type="button">＋ Разход</button>
         </div>
         <div class="panel quick-stations-panel">
-          <div class="section-heading tight"><h2>⚡ Последни места за зареждане</h2><button class="text-button" type="button" data-go="history">История →</button></div>
-          <p class="tiny">Избери място, за да попълниш типа и последната използвана цена. kWh и километражът остават празни.</p>
+          <div class="section-heading tight"><h2>⭐ Любими и последни станции</h2><button class="text-button" type="button" data-go="history">История →</button></div>
+          <p class="tiny">Докосни ☆, за да запазиш любимо място. Любимите излизат първи. При нов запис провери актуалната цена; kWh и километражът остават празни.</p>
           <div id="quick-stations" class="station-shortcuts" aria-label="Бързо зареждане от използвана станция"></div>
         </div>
         <div class="panel home-reminders"><div class="section-heading tight"><h2>📅 Срокове и обслужване</h2><button class="text-button" type="button" data-go="garage">Garage →</button></div><div id="home-due-list" class="home-due-list" aria-live="polite"><p class="small-note">Зареждане на сроковете…</p></div><p class="tiny">Проверява само ръчно въведените дати и километраж. Няма автоматични известия.</p></div>
@@ -123,14 +123,14 @@
           <label class="field">Категория<select id="expense-category">
             <option value="insurance">Insurance</option><option value="mot">MOT</option>
             <option value="tax">Road tax / VED</option><option value="service">Service</option>
-            <option value="fuel">Гориво (бензин / дизел)</option>
+            <option value="fuel">Гориво (ICE — само за стари записи)</option>
             <option value="tyres">Гуми</option><option value="repair">Ремонт</option>
             <option value="parking">Паркинг</option><option value="cleaning">Миене / грижа</option>
             <option value="other">Друго</option>
           </select></label>
           <label class="field">Разход за автомобил
-            <select id="expense-target"><option value="ev">EV</option><option value="ice">Бензин / дизел (ICE)</option><option value="both">И двата</option><option value="other">Неуточнен</option></select></label>
-          <p class="tiny expense-fuel-help">За бензин или дизел избери категория „Гориво“ и автомобил ICE. Сумата се включва в отделната справка EV/ICE.</p>
+            <select id="expense-target"><option value="ev">EV</option><option value="ice">ICE (само ако имаш реален разход)</option><option value="both">И двата</option><option value="other">Неуточнен</option></select></label>
+          <p class="tiny expense-fuel-help">За твоя автомобил остави EV. Опциите ICE са запазени само за съвместимост със стари записи; за прогнозното сравнение не въвеждай фиктивни разходи.</p>
           <label class="field">Описание<input id="expense-title" maxlength="120" placeholder="Напр. Смяна на гуми" required></label>
           <label class="field">Километраж (mi, незадължително)<input id="expense-odometer" type="number" min="0" max="9999999" step="1" inputmode="numeric" placeholder="Напр. 15800"></label>
           <label class="field">Бележки<textarea id="expense-notes" maxlength="500" rows="3" placeholder="По желание"></textarea></label>
@@ -229,8 +229,8 @@
         <p id="stats-scope-caption" class="small-note stats-scope-caption" aria-live="polite"></p>
         <div class="stats-grid stats-detail">
           <div class="stat-card"><span>Зареждания</span><strong id="stats-charging">£0.00</strong><small id="stats-charge-count">0 зареждания</small></div>
-          <div class="stat-card"><span>Други (всички автомобили)</span><strong id="stats-other">£0.00</strong><small id="stats-other-count">0 разхода</small></div>
-          <div class="stat-card total-stat"><span>Всички записани разходи</span><strong id="stats-total">£0.00</strong><small>EV + ICE + общи / неуточнени</small></div>
+          <div class="stat-card"><span>Други разходи</span><strong id="stats-other">£0.00</strong><small id="stats-other-count">0 разхода</small></div>
+          <div class="stat-card total-stat"><span>Всички записани разходи</span><strong id="stats-total">£0.00</strong><small>Включва всички въведени записи</small></div>
           <div class="stat-card"><span>Заредено количество</span><strong id="stats-kwh">0 kWh</strong><small id="stats-average-session">Средно: —</small></div>
           <div class="stat-card"><span>Средна цена / kWh</span><strong id="stats-average-price">—</strong><small>Претеглена по заредени kWh</small></div>
           <div class="stat-card"><span>Зареждане на сесия</span><strong id="stats-session-cost">—</strong><small>Средна сума за зареждане</small></div>
@@ -286,20 +286,20 @@
           <p class="tiny">Това е приблизителна цена на закупеното електричество за изминатите мили — <strong>не е измерена ефективност в mi/kWh</strong>. Възможни са неточности при пропуснати зареждания, различно ниво на батерията и няколко зареждания в един ден. Другите разходи не са включени.</p>
         </div>
         <div class="panel actual-costs-panel" aria-labelledby="actual-costs-title">
-          <h2 id="actual-costs-title">🚙 Записани разходи: EV / ICE</h2>
-          <p class="tiny">Справка за периода, избран по-горе. Зареждането се отчита само към EV; другите разходи се разпределят според полето „Разход за автомобил“. Общите и неуточнените остават отделно.</p>
+          <h2 id="actual-costs-title">🚙 Реални разходи за моя EV</h2>
+          <p class="tiny">Зареждания и поддръжка на твоя електромобил за избрания период. Съществуващите записи с друга категория се запазват отделно, без да се приписват към EV.</p>
           <div id="actual-costs-summary" aria-live="polite"></div>
-          <button id="export-actual-costs" class="secondary actual-costs-export" type="button">⬇ Разделение EV / ICE (CSV)</button>
-          <p class="tiny">Това са <strong>записани суми</strong>, не сравнение на цена за еднакъв пробег. Ако липсват записи за гориво, ICE разходът е непълен. Няма автоматично разпределяне на общите разходи.</p>
+          <button id="export-actual-costs" class="secondary actual-costs-export" type="button">⬇ Реални разходи (CSV)</button>
+          <p class="tiny">Това са <strong>действително записани суми</strong>. Сравнението с бензин/дизел по-долу е <strong>хипотетично</strong> и не изисква да имаш втори автомобил.</p>
         </div>
-        <div class="section-heading"><h2>EV срещу бензин/дизел</h2></div>
-        <p class="muted">Сравнение на <strong>разходите за енергия/гориво</strong> при еднакъв пробег. Стойностите са прогноза по твоите настройки, не измерен реален разход на миля.</p>
+        <div class="section-heading"><h2>⚡ Колко бих спестил спрямо ICE?</h2></div>
+        <p class="muted">Имаш само EV. Тук използваме <strong>примерен бензинов/дизелов автомобил</strong> за същия пробег, без да записваме фиктивни покупки на гориво. Разликата е оценка само за ток срещу гориво.</p>
         <form id="comparison-form" class="panel compare-form" novalidate>
-          <h2>Моите настройки</h2>
+          <h2>Настройки за примерното сравнение</h2>
           <div class="form-grid">
             <label class="field">Пробег (мили)<input id="compare-distance" type="number" inputmode="decimal" step="any" min="1" max="100000" required></label>
             <label class="field">EV ефективност (mi/kWh)<input id="compare-efficiency" type="number" inputmode="decimal" step="any" min="0.1" max="15" required></label>
-            <label class="field">Бензин/дизел (UK mpg)<input id="compare-mpg" type="number" inputmode="decimal" step="any" min="5" max="200" required></label>
+            <label class="field">Примерна ICE икономичност (UK mpg)<input id="compare-mpg" type="number" inputmode="decimal" step="any" min="5" max="200" required></label>
             <label class="field">Гориво (£/литър)<input id="compare-fuel-price" type="number" inputmode="decimal" step="any" min="0" max="10" required></label>
           </div>
           <label class="field">Цена за EV зареждане
@@ -312,17 +312,17 @@
             <input id="compare-manual-price" type="number" inputmode="decimal" step="any" min="0" max="10" required>
           </label>
           <button class="primary action-large" type="submit" id="save-comparison">Запази настройките</button>
-          <p class="tiny">Началните стойности са примерни — коригирай ги според твоя автомобил, тарифа и сравнявания ICE автомобил.</p>
+          <p class="tiny">Въведи примерен разход (UK mpg) и цена на горивото. За EV ефективността използвай разумна оценка или данните от автомобила. Няма нужда да притежаваш ICE.</p>
         </form>
         <div id="comparison-result" class="panel result-panel" aria-live="polite"></div>
-        <p class="tiny compare-disclaimer">Изчислението използва UK imperial gallon = 4.54609 литра. Не включва застраховки, обслужване, данъци, покупна цена, амортизация или други такси. Ако не всички зареждания са записани, средната цена може да е непредставителна.</p>
+        <p class="tiny compare-disclaimer">Оценка само за енергия/гориво при еднакви мили. UK imperial gallon = 4.54609 литра. Не включва застраховка, VED, сервиз, амортизация, различна зарядна ефективност или такси извън £/kWh. Разходът на ICE и ефективността на EV са предположения.</p>
       </section>
 
       <section class="view" id="view-data" aria-labelledby="data-title" hidden>
         <p class="eyebrow">СИГУРНОСТ НА ДАННИТЕ</p><h1 id="data-title">Данни и архив</h1>
         <div class="panel">
           <h2>💾 Резервно копие</h2>
-          <p>Изтегли <strong>един JSON файл</strong> с всички зареждания, разходи, Garage и настройки за сравнение. Архивирай извън телефона (напр. във Files или Google Drive ръчно).</p>
+          <p>Изтегли <strong>един JSON файл</strong> с всички зареждания, разходи, Garage, любими станции и настройки за сравнение. Архивирай извън телефона (напр. във Files или Google Drive ръчно).</p>
           <button id="export-backup" class="primary backup-action" type="button">⬇ Изтегли пълен JSON backup</button>
           <button id="share-backup" class="secondary backup-action" type="button" hidden>↗ Сподели архива чрез Android</button>
           <p class="tiny" id="backup-count">—</p>
@@ -402,7 +402,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v1.6.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v1.7.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
