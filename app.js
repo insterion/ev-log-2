@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.0.0
+/* EV Log 2.0 v1.1.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -49,6 +49,8 @@ let chargeEditingId = null;
 let expenseEditingId = null;
 let toastTimeout;
 let installEvent = null;
+// Dashboard month selection is UI-only and is not stored in IndexedDB.
+let overviewMonth = today().slice(0,7);
 
 function defaultComparison() {
   return {distanceMiles:100,efficiencyMiKwh:3.5,iceMpgUk:45,fuelPriceLitre:1.50,priceMode:'history',manualPriceKwh:0.56};
@@ -435,14 +437,28 @@ function renderList(target,items,cardRenderer,withActions=false,empty='Няма 
   items.forEach(item=>fragment.append(cardRenderer(item,withActions)));
   target.append(fragment);
 }
+// Move between calendar months without changing saved records or settings.
+function shiftedMonth(key,delta) {
+  const [year,month] = key.split('-').map(Number);
+  const shifted=new Date(Date.UTC(year,month-1+delta,1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth()+1).padStart(2,'0')}`;
+}
+function moveOverviewMonth(delta) {
+  const next=shiftedMonth(overviewMonth,delta);
+  if(next>today().slice(0,7)) return;
+  overviewMonth=next;
+  renderHome();
+}
 function renderHome() {
-  const current=today().slice(0,7);
+  const current=overviewMonth;
   const monthCharges=charges.filter(x=>x.date.slice(0,7)===current);
   const monthExpenses=expenses.filter(x=>x.date.slice(0,7)===current);
   const charging=monthCharges.reduce((sum,x)=>sum+chargeTotal(x),0);
   const cost=monthExpenses.reduce((sum,x)=>sum+x.amount,0);
   const kwh=monthCharges.reduce((sum,x)=>sum+x.kwh,0);
   $('month-label').textContent=monthName(current);
+  $('month-next').disabled=current>=today().slice(0,7);
+  $('month-today').disabled=current===today().slice(0,7);
   $('month-cost').textContent=money(charging);
   $('month-kwh').textContent=kwh.toFixed(2)+' kWh';
   $('month-expense').textContent=money(cost);
@@ -467,11 +483,14 @@ function renderMonthFilter(select,items) {
 function renderHistory() {
   renderMonthFilter($('history-filter'),charges);
   const selected=$('history-filter').value;
+  const selectedType=$('history-type-filter').value;
   const query=normalizedText($('history-search').value);
   const terms=query.split(' ').filter(Boolean);
   const items=charges.filter(x=>(selected==='all'||x.date.startsWith(selected)) &&
+    (selectedType==='all'||x.type===selectedType) &&
     terms.every(term=>normalizedText([x.date,fmtDate(x.date),x.kwh,x.pricePerKwh,chargeTotal(x),x.type,TYPE_NAMES[x.type]||'',x.station,x.notes,x.odometerMiles??''].join(' ')).includes(term)));
-  $('history-summary').textContent=`${items.length} записа`;
+  $('history-summary').textContent=`${items.length} от ${charges.length} зареждания`;
+  $('history-clear').disabled=selected==='all' && selectedType==='all' && !$('history-search').value.trim();
   $('history-sum').textContent=money(items.reduce((sum,x)=>sum+chargeTotal(x),0));
   renderList($('history-list'),items,chargeCard,true);
 }
@@ -1280,6 +1299,9 @@ function attachEvents() {
   document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.go)));
   $('quick-add').addEventListener('click',()=>{resetChargeForm();navigate('charge');});
   $('quick-expense').addEventListener('click',()=>openExpenseForm());
+  $('month-prev').addEventListener('click',()=>moveOverviewMonth(-1));
+  $('month-next').addEventListener('click',()=>moveOverviewMonth(1));
+  $('month-today').addEventListener('click',()=>{overviewMonth=today().slice(0,7);renderHome();});
   $('type').addEventListener('change',defaultPrice);
   $('kwh').addEventListener('input',updatePreview);$('price').addEventListener('input',updatePreview);
   $('charge-form').addEventListener('submit',async event=>{
@@ -1296,6 +1318,13 @@ function attachEvents() {
   });
   $('cancel-edit').addEventListener('click',resetChargeForm);
   $('history-filter').addEventListener('change',renderHistory);
+  $('history-type-filter').addEventListener('change',renderHistory);
+  $('history-clear').addEventListener('click',()=>{
+    $('history-filter').value='all';
+    $('history-type-filter').value='all';
+    $('history-search').value='';
+    renderHistory();
+  });
   $('history-search').addEventListener('input',renderHistory);
   $('history-list').addEventListener('click',event=>onRecordClick(event,'charge'));
   $('new-expense').addEventListener('click',()=>openExpenseForm());

@@ -211,3 +211,12 @@ p{line-height:1.55}
 .backup-confirm{display:flex;gap:10px;align-items:flex-start;padding:13px 0;font-size:13px;line-height:1.5}
 .backup-confirm input{width:22px;height:22px;flex:0 0 22px;margin:0}
 .backup-action{width:100%;margin-top:9px}
+
+
+/* v1.1 — mobile-first calendar month navigation and simple history filters. */
+.month-pager{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:7px;margin:-3px 0 17px}
+.month-pager .secondary{padding:10px 6px;min-height:44px;font-size:12px}
+.month-pager .text-button{font-size:12px;white-space:nowrap;padding:9px 3px}
+.month-pager button:disabled{opacity:.45}
+.history-clear{width:100%;margin:2px 0 14px;min-height:44px}
+@media(max-width:360px){.month-pager{gap:4px}.month-pager .secondary{font-size:11px;padding:9px 3px}.month-pager .text-button{font-size:11px}}

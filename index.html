@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=100">
+  <link rel="stylesheet" href="./styles.css?v=110">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=100" defer></script>
+  <script src="./app.js?v=110" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v1.0.0</span>
+      <span class="version">v1.1.0</span>
     </header>
 
     <main id="main">
@@ -30,7 +30,12 @@
           <h1 id="home-title">Зареждания и разходи — на едно място.</h1>
           <p class="muted">Без акаунт, без cloud. Всичко се пази на това устройство.</p>
         </div>
-        <div class="month-heading"><h2>Този месец</h2><span id="month-label" class="pill">—</span></div>
+        <div class="month-heading"><h2>Месечен преглед</h2><span id="month-label" class="pill" aria-live="polite">—</span></div>
+        <div class="month-pager" aria-label="Смяна на месец">
+          <button id="month-prev" class="secondary" type="button" aria-label="Предишен месец">‹ Предишен</button>
+          <button id="month-today" class="text-button" type="button">Този месец</button>
+          <button id="month-next" class="secondary" type="button" aria-label="Следващ месец">Следващ ›</button>
+        </div>
         <div class="stats-grid">
           <div class="stat-card"><span>Зареждания (£)</span><strong id="month-cost">£0.00</strong><small id="month-kwh">0 kWh</small></div>
           <div class="stat-card"><span>Други разходи (£)</span><strong id="month-expense">£0.00</strong><small id="month-expense-count">0 записа</small></div>
@@ -88,7 +93,11 @@
         <p class="eyebrow">ЗАРЕЖДАНИЯ</p><h1 id="history-title">История</h1>
         <p class="muted">Преглеждай, редактирай и изтривай зареждания.</p>
         <label class="field">Период<select id="history-filter"><option value="all">Всички месеци</option></select></label>
+        <label class="field">Вид зареждане
+          <select id="history-type-filter"><option value="all">Всички видове</option><option value="public">Публично AC</option><option value="rapid">Бързо DC</option><option value="home">Домашно</option><option value="work">Служебно / друго</option></select>
+        </label>
         <label class="field">Търси в зарежданията<input id="history-search" type="search" placeholder="Дата, kWh, станция, бележка…" autocomplete="off"></label>
+        <button id="history-clear" class="secondary history-clear" type="button">✕ Изчисти филтрите</button>
         <div class="history-total"><span id="history-summary">0 записа</span><strong id="history-sum">£0.00</strong></div>
         <div id="history-list" class="record-list"><p class="empty">Няма записи.</p></div>
       </section>
