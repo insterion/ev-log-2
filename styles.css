@@ -200,3 +200,14 @@ p{line-height:1.55}
 .panel .mileage-message{font-size:14px;color:#cbd7eb;margin:7px 0}
 .panel .mileage-warning{font-size:12px;color:#f5d18b;margin:6px 0 10px}
 @media(max-width:350px){.mileage-grid{grid-template-columns:1fr}}
+
+/* v1.0 — safe full-JSON backup preview. No new assets or database stores. */
+.backup-review{border:1px solid #34746b;background:#102a31;border-radius:13px;padding:15px;margin-top:14px}
+.backup-review[hidden]{display:none}
+.backup-review h3{font-size:17px;margin:0 0 12px}
+.backup-preview-details{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.backup-preview-line{padding:10px 12px;background:#15293a;border:1px solid #2a5060;border-radius:9px;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.backup-preview-line.warning{border-color:#ab803b;background:#302a1d;color:#ffe0a2}
+.backup-confirm{display:flex;gap:10px;align-items:flex-start;padding:13px 0;font-size:13px;line-height:1.5}
+.backup-confirm input{width:22px;height:22px;flex:0 0 22px;margin:0}
+.backup-action{width:100%;margin-top:9px}

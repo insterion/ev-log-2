@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.9.0
+/* EV Log 2.0 v1.0.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -777,8 +777,19 @@ function renderAll() {
 }
 function chargeSignature(x) {return [x.date,x.odometerMiles??'',x.type,x.kwh,x.pricePerKwh,x.station.trim().toLowerCase(),x.notes.trim().toLowerCase()].join('\u001f');}
 function expenseSignature(x) {return [x.date,x.amount,x.category,x.target||'ev',x.title.trim().toLowerCase(),x.odometerMiles??'',x.notes.trim().toLowerCase()].join('\u001f');}
+/* v1.0: protect against accidentally entering an identical manual record twice.
+   Legitimate repeat sessions are still possible after explicit confirmation. */
+function confirmExactDuplicate(record,kind) {
+  const isCharge=kind==='charge';
+  const same=isCharge?chargeSignature:expenseSignature;
+  const rows=isCharge?charges:expenses;
+  const duplicate=rows.find(x=>x.id!==record.id && same(x)===same(record));
+  if (!duplicate) return true;
+  return confirm(`⚠ Вече има напълно съвпадащ ${isCharge?'запис за зареждане':'запис за разход'} от ${fmtDate(record.date)}.\n\nАко това е отделно реално събитие, натисни OK. В противен случай натисни Отказ.`);
+}
+
 function validateBackup(data) {
-  if (!data || data.format!==BACKUP_FORMAT || ![1,2].includes(data.version) || !Array.isArray(data.charges)) throw Error('Файлът не е валиден архив от EV Log 2.0 (v0.1 или v0.2).');
+  if (!data || data.format!==BACKUP_FORMAT || ![1,2].includes(data.version) || !Array.isArray(data.charges)) throw Error('Невалиден архив от EV Log 2.0 (очаква се JSON формат ev-log-2).');
   if (data.charges.length>100000) throw Error('Прекалено много зареждания в архива.');
   const chargeIds=new Set();
   data.charges.forEach(x=>{validateCharge(x);if(chargeIds.has(x.id)) throw Error('Повтарящи се ID на зареждания в архива.');chargeIds.add(x.id);});
@@ -804,42 +815,116 @@ async function downloadBackup() {
   setTimeout(()=>URL.revokeObjectURL(url),60000);
   notify('Архивът е подготвен. Провери Downloads и го запази на безопасно място.');
 }
-async function importBackup(file) {
+/* v1.0: explicit, read-only preview before full JSON backup restore.
+   Format, signatures, original records and database version are unchanged. */
+let pendingBackup = null;
+let backupPlanShown = null;
+function planFullBackup(incoming) {
+  const existingChargeIds = new Map(charges.map(x=>[x.id,x]));
+  const existingCostIds = new Map(expenses.map(x=>[x.id,x]));
+  const chargePrints = new Set(charges.map(chargeSignature));
+  const costPrints = new Set(expenses.map(expenseSignature));
+  const newCharges=[],newCosts=[];
+  const counts={chargeDuplicate:0,chargeConflict:0,costDuplicate:0,costConflict:0};
+  for (const item of incoming.charges) {
+    const print=chargeSignature(item);
+    const sameId=existingChargeIds.get(item.id);
+    if (sameId) {
+      if (chargeSignature(sameId)===print) counts.chargeDuplicate++;
+      else counts.chargeConflict++;
+    } else if (chargePrints.has(print)) counts.chargeDuplicate++;
+    else {
+      newCharges.push(item);existingChargeIds.set(item.id,item);chargePrints.add(print);
+    }
+  }
+  for (const item of incoming.costs) {
+    const print=expenseSignature(item);
+    const sameId=existingCostIds.get(item.id);
+    if (sameId) {
+      if (expenseSignature(sameId)===print) counts.costDuplicate++;
+      else counts.costConflict++;
+    } else if (costPrints.has(print)) counts.costDuplicate++;
+    else {
+      newCosts.push(item);existingCostIds.set(item.id,item);costPrints.add(print);
+    }
+  }
+  const addGarage=!!incoming.garage && garageIsEmpty(garage) && !garageIsEmpty(incoming.garage);
+  const addComparison=!!incoming.comparison && !comparisonStored;
+  return {newCharges,newCosts,counts,addGarage,addComparison};
+}
+function planIdentity(plan) {
+  return JSON.stringify({
+    charges:plan.newCharges.map(x=>x.id),costs:plan.newCosts.map(x=>x.id),
+    ...plan.counts,garage:plan.addGarage,comparison:plan.addComparison,
+    snapshot:dbSnapshot()
+  });
+}
+function clearBackupPreview() {
+  pendingBackup=null;backupPlanShown=null;
+  $('backup-ack').checked=false;
+  $('backup-commit').disabled=true;
+  $('backup-preview').hidden=true;
+  $('backup-preview-details').replaceChildren();
+  $('selected-file').textContent='Няма избран файл';
+}
+function renderBackupPreview(plan,filename,exportedAt='') {
+  const target=$('backup-preview-details');target.replaceChildren();
+  const line=(s,warn=false)=>target.append(element('div',warn?'backup-preview-line warning':'backup-preview-line',s));
+  line(`Файл: ${filename}`);
+  if (exportedAt) {
+    const stamp=new Date(exportedAt);
+    if (!Number.isNaN(stamp.getTime())) line(`Дата на архива: ${stamp.toLocaleString('bg-BG')}`);
+  }
+  line(`Нови зареждания: ${plan.newCharges.length} · Повторени: ${plan.counts.chargeDuplicate}`);
+  line(`Нови разходи: ${plan.newCosts.length} · Повторени: ${plan.counts.costDuplicate}`);
+  const conflicts=plan.counts.chargeConflict+plan.counts.costConflict;
+  if (conflicts) line(`⚠ ${conflicts} конфликта: еднакъв ID, но различни данни. Няма да бъдат презаписани.`,true);
+  line(`Garage: ${plan.addGarage?'ще се добави':'без промяна'} · EV/ICE настройки: ${plan.addComparison?'ще се добавят':'без промяна'}`);
+  if (!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison)) {
+    line('Няма данни за добавяне. Можеш да затвориш този преглед.');
+  }
+  $('backup-preview').hidden=false;
+  if (pendingBackup) pendingBackup.canRestore=!!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison);
+  $('backup-commit').disabled=!$('backup-ack').checked || !pendingBackup?.canRestore;
+}
+async function previewBackupFile(file) {
+  clearBackupPreview();
   if (file.size>30*1024*1024) throw Error('Архивът е твърде голям (макс. 30 MB).');
   let obj;
   try {obj=JSON.parse(await file.text());} catch (_) {throw Error('Файлът не е валиден JSON.');}
   const incoming=validateBackup(obj);
   await refresh();
-  const chargeIds=new Set(charges.map(x=>x.id));
-  const chargeFingerprints=new Set(charges.map(chargeSignature));
-  const costIds=new Set(expenses.map(x=>x.id));
-  const costFingerprints=new Set(expenses.map(expenseSignature));
-  const newCharges=[],newCosts=[];
-  for (const item of incoming.charges) {
-    const sig=chargeSignature(item);
-    if (!chargeIds.has(item.id) && !chargeFingerprints.has(sig)) {newCharges.push(item);chargeIds.add(item.id);chargeFingerprints.add(sig);}
+  const plan=planFullBackup(incoming);
+  pendingBackup={incoming,filename:file.name,exportedAt:obj.exportedAt || ''};
+  backupPlanShown=planIdentity(plan);
+  renderBackupPreview(plan,file.name,pendingBackup.exportedAt);
+  notify('Архивът е проверен. Нищо не е добавено или изтрито.');
+}
+async function commitFullBackup() {
+  if (!pendingBackup || !$('backup-ack').checked) throw Error('Първо провери архива и потвърди, че имаш резервно копие.');
+  await refresh();
+  const plan=planFullBackup(pendingBackup.incoming);
+  if (planIdentity(plan)!==backupPlanShown) {
+    backupPlanShown=planIdentity(plan);
+    $('backup-ack').checked=false;
+    renderBackupPreview(plan,pendingBackup.filename,pendingBackup.exportedAt);
+    throw Error('Данните са се променили след прегледа. Провери новите бройки и потвърди отново.');
   }
-  for (const item of incoming.costs) {
-    const sig=expenseSignature(item);
-    if (!costIds.has(item.id) && !costFingerprints.has(sig)) {newCosts.push(item);costIds.add(item.id);costFingerprints.add(sig);}
+  if (!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison)) {
+    notify('Няма нови данни за добавяне.');clearBackupPreview();return;
   }
-  const addGarage=incoming.garage && garageIsEmpty(garage) && !garageIsEmpty(incoming.garage);
-  const addComparison=!!incoming.comparison && !comparisonStored;
-  const skippedCharges=incoming.charges.length-newCharges.length;
-  const skippedCosts=incoming.costs.length-newCosts.length;
-  if (!newCharges.length && !newCosts.length && !addGarage && !addComparison) {
-    notify(`Няма нови записи. Пропуснати: ${skippedCharges} зареждания и ${skippedCosts} разходи.`);return;
-  }
-  if (!confirm(`Импорт от EV Log 2.0\n\nНови зареждания: ${newCharges.length} (пропуснати ${skippedCharges})\nНови разходи: ${newCosts.length} (пропуснати ${skippedCosts})\nGarage: ${addGarage?'ще се добави':'без промяна'}\nEV/ICE настройки: ${addComparison?'ще се добавят':'без промяна'}\n\nПродължаваме ли?`)) return;
+  if (!confirm(`Добавяне на данни от архива?\n\nНови зареждания: ${plan.newCharges.length}\nНови разходи: ${plan.newCosts.length}\nКонфликтите се пропускат, съществуващите данни не се заменят.\n\nПродължаваме ли?`)) return;
   await transaction([STORE_CHARGES,STORE_META],tx=>{
     const cStore=tx.objectStore(STORE_CHARGES),mStore=tx.objectStore(STORE_META);
-    newCharges.forEach(x=>cStore.add(x));
-    newCosts.forEach(x=>mStore.add({key:EXPENSE_PREFIX+x.id,value:x}));
-    if (addGarage) mStore.put({key:GARAGE_KEY,value:incoming.garage});
-    if (addComparison) mStore.put({key:COMPARISON_KEY,value:incoming.comparison});
+    plan.newCharges.forEach(x=>cStore.add(x));
+    plan.newCosts.forEach(x=>mStore.add({key:EXPENSE_PREFIX+x.id,value:x}));
+    if (plan.addGarage) mStore.put({key:GARAGE_KEY,value:pendingBackup.incoming.garage});
+    if (plan.addComparison) mStore.put({key:COMPARISON_KEY,value:pendingBackup.incoming.comparison});
   });
+  const addedC=plan.newCharges.length,addedE=plan.newCosts.length;
+  clearBackupPreview();
   await refresh();loadGarageForm();loadComparisonForm();
-  notify(`Импортирани: ${newCharges.length} зареждания, ${newCosts.length} разходи${addGarage?' и Garage':''}.`);
+  notify(`Добавени: ${addedC} зареждания, ${addedE} разхода. Провери историята и направи нов backup.`);
 }
 /* --------------------- v0.4: legacy merger (preview-first) --------------------- */
 let stagedLegacy = null;
@@ -1199,7 +1284,7 @@ function attachEvents() {
   $('kwh').addEventListener('input',updatePreview);$('price').addEventListener('input',updatePreview);
   $('charge-form').addEventListener('submit',async event=>{
     event.preventDefault();const b=$('save-charge');
-    try {const item=chargeFromForm();b.disabled=true;await saveCharge(item);await refresh();resetChargeForm();navigate('home');notify('Зареждането е запазено.');}
+    try {const item=chargeFromForm();if(!confirmExactDuplicate(item,'charge'))return;b.disabled=true;await saveCharge(item);await refresh();resetChargeForm();navigate('home');notify('Зареждането е запазено.');}
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('same-as-last').addEventListener('click',()=>{
@@ -1217,7 +1302,7 @@ function attachEvents() {
   $('cancel-expense').addEventListener('click',()=>{$('expense-form').hidden=true;resetExpenseForm();});
   $('expense-form').addEventListener('submit',async event=>{
     event.preventDefault();const b=$('save-expense');
-    try {const item=expenseFromForm();b.disabled=true;await saveExpense(item);await refresh();resetExpenseForm();$('expense-form').hidden=true;notify('Разходът е запазен.');}
+    try {const item=expenseFromForm();if(!confirmExactDuplicate(item,'cost'))return;b.disabled=true;await saveExpense(item);await refresh();resetExpenseForm();$('expense-form').hidden=true;notify('Разходът е запазен.');}
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('costs-filter').addEventListener('change',renderCosts);
@@ -1253,8 +1338,18 @@ function attachEvents() {
   $('export-costs-csv').addEventListener('click',()=>exportAuditCsv('cost'));
   $('import-backup').addEventListener('change',async event=>{
     const file=event.target.files?.[0];if(!file)return;
-    $('selected-file').textContent=file.name;
-    try {await importBackup(file);}catch(error){notify(error.message,true);}finally{event.target.value='';}
+    try {await previewBackupFile(file);}
+    catch(error){clearBackupPreview();$('selected-file').textContent='❌ '+error.message;notify(error.message,true);}
+    finally{event.target.value='';}
+  });
+  $('backup-ack').addEventListener('change',()=>{
+    $('backup-commit').disabled=!$('backup-ack').checked || !pendingBackup?.canRestore;
+  });
+  $('backup-cancel').addEventListener('click',clearBackupPreview);
+  $('backup-commit').addEventListener('click',async()=>{
+    const b=$('backup-commit');if(b.disabled)return;b.disabled=true;
+    try{await commitFullBackup();}catch(error){notify(error.message,true);}
+    finally{if(pendingBackup)b.disabled=!$('backup-ack').checked || !pendingBackup.canRestore;}
   });
   bindLegacyEvents();
   $('install-cta').addEventListener('click',async()=>{
