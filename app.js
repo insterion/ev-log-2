@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.4.0
+/* EV Log 2.0 v1.5.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -931,6 +931,7 @@ function renderStats() {
   renderCustomRangeControls();
   renderMonthComparison();
   const scope=periodScope();
+  renderPeriodExportScope(scope);
   $('stats-scope-caption').textContent=scope.period==='custom'
     ?`Период: ${fmtDate(customRange.from)} – ${fmtDate(customRange.to)} · включително.`
     :scope.period==='all'?'Период: всички въведени записи.':`Период: последните ${scope.period} календарни месеца, включително текущия.`;
@@ -1479,7 +1480,7 @@ function runAudit() {
 function csvSafe(value) {
   let s=String(value??'');
   // Prevent CSV/Excel formula execution when user-entered text is opened in a spreadsheet.
-  if(/^\s*[=+@-]/.test(s))s="'"+s;
+  if(/^\s*[=+@-]/.test(s) && !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(s))s="'"+s;
   return '"'+s.replace(/"/g,'""')+'"';
 }
 function downloadCsv(rows,filename) {
@@ -1490,6 +1491,68 @@ function downloadCsv(rows,filename) {
   document.body.append(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
+/* v1.5 — read-only CSV reports. Uses the same periodScope() as visible analytics.
+   The two-month comparison is intentionally independent from this period. */
+function periodExportTag(scope) {
+  if (scope.period==='custom') return `from-${customRange.from}-to-${customRange.to}`;
+  if (scope.period==='all') return 'all-history';
+  return `last-${scope.period}-months`;
+}
+function periodDetailsCsvRows(scope=periodScope()) {
+  const header=['date','record_type','vehicle','type_or_category','description','kwh','price_gbp_per_kwh','total_gbp','odometer_miles','notes','import_source'];
+  const records=[];
+  for(const x of scope.selectedCharges) {
+    records.push({date:x.date,id:x.id,row:[x.date,'charging','EV',x.type,x.station||'',x.kwh,x.pricePerKwh,chargeTotal(x).toFixed(2),x.odometerMiles??'',x.notes||'',x.importSource||'manual']});
+  }
+  for(const x of scope.selectedExpenses) {
+    records.push({date:x.date,id:x.id,row:[x.date,'expense',x.target||'ev',x.category,x.title,x.kwh??'', '',roundPence(x.amount).toFixed(2),x.odometerMiles??'',x.notes||'',x.importSource||'manual']});
+  }
+  records.sort((a,b)=>b.date.localeCompare(a.date)||String(a.id).localeCompare(String(b.id)));
+  return [header,...records.map(x=>x.row)];
+}
+function periodMonthsCsvRows(scope=periodScope()) {
+  const header=['month','charging_count','kwh','charging_gbp','average_gbp_per_kwh','expense_count','other_expenses_gbp','total_gbp'];
+  // The chart may show only the last 36 months. Exports must never silently
+  // drop older months with data when "All" or a long date range is selected.
+  const dataMonths=[...scope.selectedCharges,...scope.selectedExpenses].map(x=>x.date.slice(0,7));
+  const months=[...new Set([...scope.months,...dataMonths])].sort();
+  const result=[header];
+  for(const month of months) {
+    const cs=scope.selectedCharges.filter(x=>x.date.startsWith(month));
+    const ex=scope.selectedExpenses.filter(x=>x.date.startsWith(month));
+    const kwh=cs.reduce((sum,x)=>sum+x.kwh,0);
+    const charging=cs.reduce((sum,x)=>sum+chargeTotal(x),0);
+    const other=ex.reduce((sum,x)=>sum+x.amount,0);
+    result.push([month,cs.length,Number(kwh.toFixed(3)),roundPence(charging).toFixed(2),kwh>0?(charging/kwh).toFixed(4):'',ex.length,roundPence(other).toFixed(2),roundPence(charging+other).toFixed(2)]);
+  }
+  return result;
+}
+function monthComparisonCsvRows(aMonth,bMonth) {
+  if(!monthValid(aMonth) || !monthValid(bMonth))throw Error('Избери два валидни месеца.');
+  const a=compareMonthValues(aMonth),b=compareMonthValues(bMonth);
+  const fields=['side','month','charging_count','kwh','charging_gbp','average_gbp_per_kwh','expense_count','other_expenses_gbp','total_gbp'];
+  const row=(side,x)=>[side,x.month,x.chargeCount,Number(x.kwh.toFixed(3)),roundPence(x.charging).toFixed(2),x.kwh>0?(x.charging/x.kwh).toFixed(4):'',x.expenseCount,roundPence(x.other).toFixed(2),roundPence(x.total).toFixed(2)];
+  // A difference in average tariffs is not a meaningful "overall tariff".
+  const delta=['B_minus_A','',b.chargeCount-a.chargeCount,Number((b.kwh-a.kwh).toFixed(3)),roundPence(b.charging-a.charging).toFixed(2),'',b.expenseCount-a.expenseCount,roundPence(b.other-a.other).toFixed(2),roundPence(b.total-a.total).toFixed(2)];
+  return [fields,row('A',a),row('B',b),delta];
+}
+function exportPeriodCsv(kind) {
+  const scope=periodScope();
+  const rows=kind==='details'?periodDetailsCsvRows(scope):periodMonthsCsvRows(scope);
+  const kindName=kind==='details'?'entries':'monthly';
+  downloadCsv(rows,`EV-Log-2-${kindName}-${periodExportTag(scope)}-${today()}.csv`);
+  notify(`CSV отчетът е подготвен (${rows.length-1} реда). Провери Downloads. JSON Backup остава отделен.`);
+}
+function exportComparisonCsv() {
+  const a=$('stats-month-a').value,b=$('stats-month-b').value;
+  const rows=monthComparisonCsvRows(a,b);
+  downloadCsv(rows,`EV-Log-2-compare-${a}-vs-${b}.csv`);
+  notify('Сравнението е подготвено като CSV. Провери Downloads.');
+}
+function renderPeriodExportScope(scope) {
+  $('stats-export-scope').textContent=`Избран период: ${scope.period==='custom' ? `${fmtDate(customRange.from)} – ${fmtDate(customRange.to)}` : scope.period==='all' ? 'всички записи' : `последните ${scope.period} календарни месеца`} · ${scope.selectedCharges.length} зареждания · ${scope.selectedExpenses.length} други разхода.`;
+}
+
 function exportAuditCsv(kind) {
   if(kind==='charge'){
     const rows=[['date','kwh','price_per_kwh','total_gbp','type','odometer_miles','station','note','import_source']];
@@ -1597,6 +1660,9 @@ function attachEvents() {
   $('stats-apply-range').addEventListener('click',applyCustomRange);
   $('stats-month-a').addEventListener('change',renderMonthComparison);
   $('stats-month-b').addEventListener('change',renderMonthComparison);
+  $('export-period-details').addEventListener('click',()=>exportPeriodCsv('details'));
+  $('export-period-months').addEventListener('click',()=>exportPeriodCsv('months'));
+  $('export-month-comparison').addEventListener('click',()=>{try{exportComparisonCsv();}catch(error){notify(error.message,true);}});
   renderMonthComparison();
   $('compare-price-mode').addEventListener('change',()=>{updateManualPriceVisibility();try{renderComparison(comparisonFromForm());}catch(_){}});
   $('comparison-form').addEventListener('input',()=>{try{renderComparison(comparisonFromForm());}catch(_){}});

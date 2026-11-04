@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=140">
+  <link rel="stylesheet" href="./styles.css?v=150">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=140" defer></script>
+  <script src="./app.js?v=150" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v1.4.0</span>
+      <span class="version">v1.5.0</span>
     </header>
 
     <main id="main">
@@ -233,6 +233,16 @@
           <div class="stat-card"><span>Средна цена / kWh</span><strong id="stats-average-price">—</strong><small>Претеглена по заредени kWh</small></div>
           <div class="stat-card"><span>Зареждане на сесия</span><strong id="stats-session-cost">—</strong><small>Средна сума за зареждане</small></div>
         </div>
+        <div class="panel stats-reports-panel" aria-labelledby="stats-reports-title">
+          <h2 id="stats-reports-title">⬇ CSV отчети за периода</h2>
+          <p class="tiny">Отчетите използват точно периода, който виждаш в „Анализ“. Ако си променил дати, първо натисни „Покажи периода“. Експортът не променя записите.</p>
+          <p id="stats-export-scope" class="small-note" aria-live="polite">Проверка на периода…</p>
+          <div class="stats-report-buttons">
+            <button id="export-period-details" type="button" class="secondary">⬇ Всички записи за периода (CSV)</button>
+            <button id="export-period-months" type="button" class="secondary">⬇ Справка по месеци (CSV)</button>
+          </div>
+          <p class="tiny">CSV е за преглед в Excel / Google Sheets и <strong>не заменя пълния JSON Backup</strong>. Файловете остават на устройството, докато ти не ги споделиш.</p>
+        </div>
         <div class="panel stats-month-compare">
           <h2>📊 Сравни два месеца</h2>
           <p class="tiny">Избери два календарни месеца. Сравнението използва всички записи за тях и е независимо от филтъра „Период“ по-горе.</p>
@@ -241,6 +251,7 @@
             <label class="field">Месец B<input id="stats-month-b" type="month"></label>
           </div>
           <div id="stats-month-comparison" aria-live="polite"></div>
+          <button id="export-month-comparison" type="button" class="secondary stats-export-compare">⬇ Изтегли сравнението (CSV)</button>
         </div>
         <div class="panel">
           <h2>Разходи по месеци</h2>
@@ -382,7 +393,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v1.4.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v1.5.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>

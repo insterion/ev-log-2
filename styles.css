@@ -255,3 +255,12 @@ p{line-height:1.55}
 .month-compare-difference strong{font-size:21px;color:var(--accent);overflow-wrap:anywhere}
 .month-compare-difference .small-note{margin:0;line-height:1.5}
 @media(max-width:365px){.month-compare-grid{grid-template-columns:1fr}}
+
+/* v1.5 — read-only period CSV exports. */
+.stats-reports-panel{border-color:#336260}
+.stats-reports-panel .tiny{line-height:1.55}
+.stats-reports-panel #stats-export-scope{border-left:3px solid var(--accent);padding:10px 12px;margin:12px 0;background:#102c32;border-radius:0 8px 8px 0;line-height:1.6}
+.stats-report-buttons{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:13px 0}
+.stats-report-buttons button,.stats-export-compare{min-height:48px;white-space:normal;font-size:12px;line-height:1.5}
+.stats-export-compare{width:100%;margin-top:14px}
+@media(max-width:410px){.stats-report-buttons{grid-template-columns:1fr}}
