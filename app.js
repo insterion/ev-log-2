@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.5.0
+/* EV Log 2.0 v1.6.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -14,7 +14,7 @@ const COMPARISON_KEY = 'comparison:settings';
 const BACKUP_FORMAT = 'ev-log-2';
 const PRICE_HINTS = { public:0.56, rapid:0.79, home:0.24, work:0 };
 const TYPE_NAMES = { public:'Публично AC', rapid:'Бързо DC', home:'Домашно', work:'Служебно / друго' };
-const COST_NAMES = { insurance:'Insurance', mot:'MOT', tax:'Road tax / VED', service:'Service', tyres:'Гуми', repair:'Ремонт', parking:'Паркинг', cleaning:'Миене / грижа', other:'Друго' };
+const COST_NAMES = { insurance:'Insurance', mot:'MOT', tax:'Road tax / VED', service:'Service', tyres:'Гуми', repair:'Ремонт', parking:'Паркинг', cleaning:'Миене / грижа', fuel:'Гориво (ICE)', other:'Друго' };
 const DUE_NAMES = {mot:'MOT',insurance:'Insurance',tax:'Road tax / VED',service:'Service'};
 const $ = id => document.getElementById(id);
 const money = value => '£' + Number(value).toFixed(2);
@@ -927,6 +927,85 @@ function renderMileageEstimate(scope=periodScope()) {
     `${result.missing} от ${result.chargeCount} зареждания в интервала са без километраж. Те са включени в сумата, но не служат за крайни показания.`));
   target.append(element('p','small-note','Началният ден е изключен от сумата; последният е включен. Разликата в нивото на батерията не се отчита.'));
 }
+/* v1.6 — record-based EV/ICE costs, not a like-for-like cost comparison.
+ * Only charges belong to EV automatically; car-assigned expenses are counted
+ * exactly once. 'both' and 'other' must not be silently assigned to either.
+ * Historical expenses without a target use the app's legacy default 'ev'. */
+function actualCostsForScope(scope=periodScope()) {
+  const result={
+    evCharging:0,evChargingCount:scope.selectedCharges.length,
+    evOther:0,evOtherCount:0,iceFuel:0,iceFuelCount:0,
+    iceOther:0,iceOtherCount:0,shared:0,sharedCount:0,
+    unassigned:0,unassignedCount:0
+  };
+  result.evCharging=scope.selectedCharges.reduce((sum,x)=>sum+chargeTotal(x),0);
+  for(const expense of scope.selectedExpenses) {
+    const target=expense.target || 'ev'; // historical compatibility
+    const amount=expense.amount;
+    if(target==='ev') { result.evOther+=amount; result.evOtherCount++; }
+    else if(target==='ice') {
+      if(expense.category==='fuel') {result.iceFuel+=amount;result.iceFuelCount++;}
+      else {result.iceOther+=amount;result.iceOtherCount++;}
+    } else if(target==='both') {result.shared+=amount;result.sharedCount++;}
+    else {result.unassigned+=amount;result.unassignedCount++;}
+  }
+  result.evTotal=result.evCharging+result.evOther;
+  result.iceTotal=result.iceFuel+result.iceOther;
+  result.allTotal=result.evTotal+result.iceTotal+result.shared+result.unassigned;
+  return result;
+}
+function actualCostsCsvRows(scope=periodScope()) {
+  const x=actualCostsForScope(scope);
+  return [
+    ['vehicle','category','record_count','amount_gbp'],
+    ['EV','charging',x.evChargingCount,roundPence(x.evCharging).toFixed(2)],
+    ['EV','other_expenses',x.evOtherCount,roundPence(x.evOther).toFixed(2)],
+    ['EV','total',x.evChargingCount+x.evOtherCount,roundPence(x.evTotal).toFixed(2)],
+    ['ICE','fuel',x.iceFuelCount,roundPence(x.iceFuel).toFixed(2)],
+    ['ICE','other_expenses',x.iceOtherCount,roundPence(x.iceOther).toFixed(2)],
+    ['ICE','total',x.iceFuelCount+x.iceOtherCount,roundPence(x.iceTotal).toFixed(2)],
+    ['Shared','not_allocated',x.sharedCount,roundPence(x.shared).toFixed(2)],
+    ['Unassigned','not_allocated',x.unassignedCount,roundPence(x.unassigned).toFixed(2)],
+    ['All','grand_total',scope.selectedCharges.length+scope.selectedExpenses.length,roundPence(x.allTotal).toFixed(2)]
+  ];
+}
+function renderActualCosts(scope=periodScope()) {
+  const x=actualCostsForScope(scope),box=$('actual-costs-summary');
+  box.replaceChildren();
+  const grid=element('div','actual-vehicle-grid');
+  for(const vehicle of [
+    {title:'Електромобил (EV)',total:x.evTotal,rows:[['Зареждане',x.evCharging,x.evChargingCount],['Други EV разходи',x.evOther,x.evOtherCount]]},
+    {title:'Бензин / дизел (ICE)',total:x.iceTotal,rows:[['Гориво',x.iceFuel,x.iceFuelCount],['Други ICE разходи',x.iceOther,x.iceOtherCount]]}
+  ]) {
+    const card=element('div','actual-vehicle-card');
+    card.append(element('span','actual-vehicle-title',vehicle.title),element('strong','actual-vehicle-total',money(vehicle.total)));
+    for(const [label,value,count] of vehicle.rows) {
+      const row=element('div','actual-cost-line');
+      row.append(element('span','',`${label} (${count})`),element('strong','',money(value)));
+      card.append(row);
+    }
+    grid.append(card);
+  }
+  box.append(grid);
+  const others=element('div','actual-other-costs');
+  for(const [label,value,count] of [
+    ['Общи — без разпределение',x.shared,x.sharedCount],
+    ['Неуточнени — без разпределение',x.unassigned,x.unassignedCount],
+    ['Всички записани разходи',x.allTotal,scope.selectedCharges.length+scope.selectedExpenses.length]
+  ]) {
+    const row=element('div','actual-cost-line');
+    row.append(element('span','',`${label} (${count})`),element('strong','',money(value)));
+    others.append(row);
+  }
+  box.append(others);
+  if(!x.iceFuelCount)box.append(element('p','actual-cost-warning','ℹ Няма отделни ICE разходи с категория „Гориво“ в избрания период. Провери дали горивото е въведено и правилно категоризирано.'));
+  if(x.sharedCount || x.unassignedCount)box.append(element('p','small-note','Общите и неуточнените разходи не се включват в нито една автомобилна сума.'));
+}
+function exportActualCostsCsv() {
+  const scope=periodScope();
+  downloadCsv(actualCostsCsvRows(scope),`EV-Log-2-actual-EV-ICE-${periodExportTag(scope)}-${today()}.csv`);
+  notify('Справката EV/ICE е експортирана като CSV. JSON backup остава отделен.');
+}
 function renderStats() {
   renderCustomRangeControls();
   renderMonthComparison();
@@ -960,6 +1039,7 @@ function renderStats() {
   renderTariffRows($('stats-price-by-type'),chargingBreakdownByType(cs));
   renderTariffRows($('stats-price-by-station'),chargingBreakdownByStation(cs));
   renderMileageEstimate(scope);
+  renderActualCosts(scope);
   renderComparison(comparison,scope);
 }
 
@@ -1640,7 +1720,9 @@ function attachEvents() {
   $('cancel-expense').addEventListener('click',()=>{$('expense-form').hidden=true;resetExpenseForm();});
   $('expense-form').addEventListener('submit',async event=>{
     event.preventDefault();const b=$('save-expense');
-    try {const item=expenseFromForm();if(!confirmExactDuplicate(item,'cost'))return;b.disabled=true;await saveExpense(item);await refresh();resetExpenseForm();$('expense-form').hidden=true;notify('Разходът е запазен.');}
+    try {const item=expenseFromForm();
+      if(item.category==='fuel' && item.target!=='ice' && !confirm('Горивото обикновено е разход за ICE. Избрано е друго предназначение. Сигурен ли си?'))return;
+      if(!confirmExactDuplicate(item,'cost'))return;b.disabled=true;await saveExpense(item);await refresh();resetExpenseForm();$('expense-form').hidden=true;notify('Разходът е запазен.');}
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('costs-filter').addEventListener('change',renderCosts);
@@ -1663,6 +1745,13 @@ function attachEvents() {
   $('export-period-details').addEventListener('click',()=>exportPeriodCsv('details'));
   $('export-period-months').addEventListener('click',()=>exportPeriodCsv('months'));
   $('export-month-comparison').addEventListener('click',()=>{try{exportComparisonCsv();}catch(error){notify(error.message,true);}});
+  $('export-actual-costs').addEventListener('click',()=>{try{exportActualCostsCsv();}catch(error){notify(error.message,true);}});
+  $('expense-category').addEventListener('change',()=>{
+    if($('expense-category').value==='fuel' && $('expense-target').value==='ev') {
+      $('expense-target').value='ice';
+      notify('Избрах ICE за горивото. Провери автомобила преди запис.');
+    }
+  });
   renderMonthComparison();
   $('compare-price-mode').addEventListener('change',()=>{updateManualPriceVisibility();try{renderComparison(comparisonFromForm());}catch(_){}});
   $('comparison-form').addEventListener('input',()=>{try{renderComparison(comparisonFromForm());}catch(_){}});

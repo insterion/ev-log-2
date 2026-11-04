@@ -264,3 +264,19 @@ p{line-height:1.55}
 .stats-report-buttons button,.stats-export-compare{min-height:48px;white-space:normal;font-size:12px;line-height:1.5}
 .stats-export-compare{width:100%;margin-top:14px}
 @media(max-width:410px){.stats-report-buttons{grid-template-columns:1fr}}
+
+/* v1.6 — independent, record-based EV/ICE cost breakdown. */
+.actual-costs-panel{border-color:#32756c}
+.actual-vehicle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:13px 0}
+.actual-vehicle-card{background:#102638;border:1px solid #315b67;border-radius:12px;padding:13px 11px;min-width:0}
+.actual-vehicle-title{display:block;color:#cde2f2;font-size:12px;font-weight:700;line-height:1.4}
+.actual-vehicle-total{display:block;color:var(--accent);font-size:clamp(20px,5vw,25px);margin:8px 0 10px;overflow-wrap:anywhere}
+.actual-cost-line{display:flex;align-items:start;justify-content:space-between;gap:9px;border-top:1px solid #294857;padding:9px 0;line-height:1.5;font-size:12px}
+.actual-cost-line span{color:var(--muted)}
+.actual-cost-line strong{white-space:nowrap;font-size:12px}
+.actual-other-costs{background:#122534;border-radius:11px;padding:4px 11px;margin:12px 0}
+.actual-other-costs .actual-cost-line:last-child strong{color:var(--accent)}
+.actual-cost-warning{border-left:3px solid #caab5c;background:#30291c;border-radius:0 8px 8px 0;color:#ffe2ae;padding:10px 12px;font-size:12px;line-height:1.5;margin:10px 0}
+.actual-costs-export{width:100%;min-height:46px;margin:8px 0 10px}
+.expense-fuel-help{padding:8px 10px;background:#132d34;border-radius:8px;line-height:1.55}
+@media(max-width:375px){.actual-vehicle-grid{grid-template-columns:1fr}}

@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=150">
+  <link rel="stylesheet" href="./styles.css?v=160">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=150" defer></script>
+  <script src="./app.js?v=160" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v1.5.0</span>
+      <span class="version">v1.6.0</span>
     </header>
 
     <main id="main">
@@ -123,12 +123,14 @@
           <label class="field">Категория<select id="expense-category">
             <option value="insurance">Insurance</option><option value="mot">MOT</option>
             <option value="tax">Road tax / VED</option><option value="service">Service</option>
+            <option value="fuel">Гориво (бензин / дизел)</option>
             <option value="tyres">Гуми</option><option value="repair">Ремонт</option>
             <option value="parking">Паркинг</option><option value="cleaning">Миене / грижа</option>
             <option value="other">Друго</option>
           </select></label>
           <label class="field">Разход за автомобил
             <select id="expense-target"><option value="ev">EV</option><option value="ice">Бензин / дизел (ICE)</option><option value="both">И двата</option><option value="other">Неуточнен</option></select></label>
+          <p class="tiny expense-fuel-help">За бензин или дизел избери категория „Гориво“ и автомобил ICE. Сумата се включва в отделната справка EV/ICE.</p>
           <label class="field">Описание<input id="expense-title" maxlength="120" placeholder="Напр. Смяна на гуми" required></label>
           <label class="field">Километраж (mi, незадължително)<input id="expense-odometer" type="number" min="0" max="9999999" step="1" inputmode="numeric" placeholder="Напр. 15800"></label>
           <label class="field">Бележки<textarea id="expense-notes" maxlength="500" rows="3" placeholder="По желание"></textarea></label>
@@ -227,8 +229,8 @@
         <p id="stats-scope-caption" class="small-note stats-scope-caption" aria-live="polite"></p>
         <div class="stats-grid stats-detail">
           <div class="stat-card"><span>Зареждания</span><strong id="stats-charging">£0.00</strong><small id="stats-charge-count">0 зареждания</small></div>
-          <div class="stat-card"><span>Други разходи</span><strong id="stats-other">£0.00</strong><small id="stats-other-count">0 разхода</small></div>
-          <div class="stat-card total-stat"><span>Всички разходи</span><strong id="stats-total">£0.00</strong><small>Зареждане + поддръжка и други</small></div>
+          <div class="stat-card"><span>Други (всички автомобили)</span><strong id="stats-other">£0.00</strong><small id="stats-other-count">0 разхода</small></div>
+          <div class="stat-card total-stat"><span>Всички записани разходи</span><strong id="stats-total">£0.00</strong><small>EV + ICE + общи / неуточнени</small></div>
           <div class="stat-card"><span>Заредено количество</span><strong id="stats-kwh">0 kWh</strong><small id="stats-average-session">Средно: —</small></div>
           <div class="stat-card"><span>Средна цена / kWh</span><strong id="stats-average-price">—</strong><small>Претеглена по заредени kWh</small></div>
           <div class="stat-card"><span>Зареждане на сесия</span><strong id="stats-session-cost">—</strong><small>Средна сума за зареждане</small></div>
@@ -282,6 +284,13 @@
           <p class="tiny">Използва само зарежданията с попълнен километраж за избрания период. Изчислението обхваща зарежданията <strong>след датата на първото показание</strong> до датата на последното, включително.</p>
           <div id="mileage-summary" class="mileage-summary" aria-live="polite"></div>
           <p class="tiny">Това е приблизителна цена на закупеното електричество за изминатите мили — <strong>не е измерена ефективност в mi/kWh</strong>. Възможни са неточности при пропуснати зареждания, различно ниво на батерията и няколко зареждания в един ден. Другите разходи не са включени.</p>
+        </div>
+        <div class="panel actual-costs-panel" aria-labelledby="actual-costs-title">
+          <h2 id="actual-costs-title">🚙 Записани разходи: EV / ICE</h2>
+          <p class="tiny">Справка за периода, избран по-горе. Зареждането се отчита само към EV; другите разходи се разпределят според полето „Разход за автомобил“. Общите и неуточнените остават отделно.</p>
+          <div id="actual-costs-summary" aria-live="polite"></div>
+          <button id="export-actual-costs" class="secondary actual-costs-export" type="button">⬇ Разделение EV / ICE (CSV)</button>
+          <p class="tiny">Това са <strong>записани суми</strong>, не сравнение на цена за еднакъв пробег. Ако липсват записи за гориво, ICE разходът е непълен. Няма автоматично разпределяне на общите разходи.</p>
         </div>
         <div class="section-heading"><h2>EV срещу бензин/дизел</h2></div>
         <p class="muted">Сравнение на <strong>разходите за енергия/гориво</strong> при еднакъв пробег. Стойностите са прогноза по твоите настройки, не измерен реален разход на миля.</p>
@@ -393,7 +402,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v1.5.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v1.6.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
