@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=080">
+  <link rel="stylesheet" href="./styles.css?v=090">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=080" defer></script>
+  <script src="./app.js?v=090" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v0.8.0</span>
+      <span class="version">v0.9.0</span>
     </header>
 
     <main id="main">
@@ -228,6 +228,12 @@
           <h2>Видове зареждане</h2><p class="tiny">Дял от заредените kWh за избрания период.</p>
           <div id="stats-type-bars" class="bar-chart type-chart"></div>
         </div>
+        <div class="panel mileage-panel">
+          <h2>🛣️ Километраж и ориентировъчна цена на миля</h2>
+          <p class="tiny">Използва само зарежданията с попълнен километраж за избрания период. Изчислението обхваща зарежданията <strong>след датата на първото показание</strong> до датата на последното, включително.</p>
+          <div id="mileage-summary" class="mileage-summary" aria-live="polite"></div>
+          <p class="tiny">Това е приблизителна цена на закупеното електричество за изминатите мили — <strong>не е измерена ефективност в mi/kWh</strong>. Възможни са неточности при пропуснати зареждания, различно ниво на батерията и няколко зареждания в един ден. Другите разходи не са включени.</p>
+        </div>
         <div class="section-heading"><h2>EV срещу бензин/дизел</h2></div>
         <p class="muted">Сравнение на <strong>разходите за енергия/гориво</strong> при еднакъв пробег. Стойностите са прогноза по твоите настройки, не измерен реален разход на миля.</p>
         <form id="comparison-form" class="panel compare-form" novalidate>
@@ -278,7 +284,7 @@
         </div>
         <div class="panel">
           <h2>📥 Възстановяване</h2>
-          <p>Избери архив от EV Log 2.0 v0.1–v0.8.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
+          <p>Избери архив от EV Log 2.0 v0.1–v0.9.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
           <label class="file-button" for="import-backup">Избери JSON файл</label>
           <input type="file" id="import-backup" accept=".json,application/json" class="visually-hidden">
           <p class="tiny" id="selected-file">Няма избран файл</p>
@@ -316,7 +322,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v0.8.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v0.9.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>

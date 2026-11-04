@@ -187,3 +187,16 @@ p{line-height:1.55}
 .tariff-heading .tariff-price{color:var(--accent);flex-shrink:0;white-space:nowrap}
 .tariff-details{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
 @media(max-width:380px){.station-shortcuts{grid-template-columns:1fr}.tariff-heading{flex-direction:column;gap:4px}}
+
+/* v0.9 — read-only mileage estimate; smartphone-friendly cards */
+.mileage-panel{border-color:#386b70}
+.mileage-summary{margin:14px 0 4px}
+.mileage-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-bottom:13px}
+.mileage-figure{display:flex;flex-direction:column;gap:7px;min-width:0;padding:13px 11px;border:1px solid #315264;background:#102837;border-radius:12px}
+.mileage-figure span{font-size:12px;color:var(--muted)}
+.mileage-figure strong{font-size:clamp(18px,4.8vw,24px);line-height:1.25;overflow-wrap:anywhere;color:var(--text)}
+.mileage-figure:last-child strong{color:var(--accent)}
+.panel .mileage-dates{color:#d3e1f1;font-size:12px;line-height:1.5;margin:4px 0 12px}
+.panel .mileage-message{font-size:14px;color:#cbd7eb;margin:7px 0}
+.panel .mileage-warning{font-size:12px;color:#f5d18b;margin:6px 0 10px}
+@media(max-width:350px){.mileage-grid{grid-template-columns:1fr}}

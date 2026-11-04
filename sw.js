@@ -1,9 +1,9 @@
 'use strict';
-/* EV Log 2.0 v0.8.0 — stable source names, versioned cache entries.
+/* EV Log 2.0 v0.9.0 — stable source names, versioned cache entries.
    Network-first for online updates. IndexedDB is never cached/uploaded. */
-const CACHE_NAME='ev-log-2-shell-v080';
+const CACHE_NAME='ev-log-2-shell-v090';
 const PREFIX='ev-log-2-shell-';
-const SHELL=['./','./index.html','./styles.css?v=070','./app.js?v=070','./legacy-import.js?v=070','./manifest.json','./icon-192.png','./icon-512.png'];
+const SHELL=['./','./index.html','./styles.css?v=090','./app.js?v=090','./legacy-import.js?v=080','./manifest.json','./icon-192.png','./icon-512.png'];
 
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));

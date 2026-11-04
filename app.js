@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.8.0
+/* EV Log 2.0 v0.9.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -682,6 +682,64 @@ function renderComparison(config=comparison,scope=periodScope()) {
   highlight.append(element('p','',config.priceMode==='history'?'EV цената е претеглената средна от реално въведените зареждания за избрания период.':'EV цената е зададена ръчно в настройките.'));
   box.append(highlight);
 }
+/* v0.9 — purely derived mileage/charging-cost indicator. Nothing is stored.
+ * We deliberately do not call this measured mi/kWh: charging != battery consumption.
+ * Start-day charging is excluded (ambiguous ordering on a date-only record).
+ * Last-day charging is included. This is only a rough spend/distance proxy.
+ */
+function mileageEstimate(items) {
+  const readings = items.filter(x => Number.isInteger(x.odometerMiles) && x.odometerMiles >= 0 && x.odometerMiles <= 9999999)
+    .sort((a,b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || '') || a.id.localeCompare(b.id));
+  if (readings.length < 2) return {status:'few-readings',readings:readings.length};
+  const first=readings[0],last=readings[readings.length-1];
+  if (first.date===last.date) return {status:'same-day',readings:readings.length};
+  for(let i=1;i<readings.length;i++) {
+    // Do not display a monetary ratio if recorded mileage decreases, even on the same day.
+    if(readings[i].odometerMiles < readings[i-1].odometerMiles) {
+      return {status:'inconsistent',readings:readings.length};
+    }
+  }
+  const distance=last.odometerMiles-first.odometerMiles;
+  if (distance<=0) return {status:'no-distance',readings:readings.length};
+  const interval=items.filter(x => x.date>first.date && x.date<=last.date);
+  if (!interval.length) return {status:'no-charges',readings:readings.length,first,last,distance};
+  const paid=interval.reduce((sum,x)=>sum+chargeTotal(x),0);
+  const missing=interval.filter(x=>x.odometerMiles==null).length;
+  return {status:'ok',readings:readings.length,first,last,distance,paid,chargeCount:interval.length,missing,
+    pencePerMile:paid/distance*100};
+}
+function renderMileageEstimate(scope=periodScope()) {
+  const target=$('mileage-summary');target.replaceChildren();
+  const result=mileageEstimate(scope.selectedCharges);
+  const hints={
+    'few-readings':'Нужни са поне две зареждания с попълнен километраж на различни дати. Записвай показанията в мили при следващите зареждания.',
+    'same-day':'Наличните показания са само от един ден. Нужни са стойности от различни дати.',
+    'inconsistent':'Открит е намаляващ километраж. Провери и коригирай показанията в „История“, преди да използваш тази справка.',
+    'no-distance':'Между първото и последното показание няма отчетен положителен пробег.',
+    'no-charges':'Има пробег, но няма записани зареждания между двете крайни дати. Не може да се изчисли цена на миля.'
+  };
+  if(result.status!=='ok') {
+    target.append(element('p','mileage-message',hints[result.status]));
+    target.append(element('p','small-note',`Попълнени показания за периода: ${result.readings}.`));
+    return;
+  }
+  const grid=element('div','mileage-grid');
+  for(const [label,value] of [
+    ['Пробег',`${result.distance.toLocaleString('en-GB')} mi`],
+    ['Зареждания в интервала',String(result.chargeCount)],
+    ['Платено за зареждане',money(result.paid)],
+    ['Ориентировъчно',`${result.pencePerMile.toFixed(2)} p/mi`]
+  ]) {
+    const card=element('div','mileage-figure');
+    card.append(element('span','',label),element('strong','',value));grid.append(card);
+  }
+  target.append(grid);
+  target.append(element('p','mileage-dates',
+    `${fmtDate(result.first.date)}: ${result.first.odometerMiles.toLocaleString('en-GB')} mi → ${fmtDate(result.last.date)}: ${result.last.odometerMiles.toLocaleString('en-GB')} mi`));
+  if (result.missing) target.append(element('p','mileage-warning',
+    `${result.missing} от ${result.chargeCount} зареждания в интервала са без километраж. Те са включени в сумата, но не служат за крайни показания.`));
+  target.append(element('p','small-note','Началният ден е изключен от сумата; последният е включен. Разликата в нивото на батерията не се отчита.'));
+}
 function renderStats() {
   const scope=periodScope();
   const cs=scope.selectedCharges,ex=scope.selectedExpenses;
@@ -708,6 +766,7 @@ function renderStats() {
   renderTypeBreakdown(cs,kwh);
   renderTariffRows($('stats-price-by-type'),chargingBreakdownByType(cs));
   renderTariffRows($('stats-price-by-station'),chargingBreakdownByStation(cs));
+  renderMileageEstimate(scope);
   renderComparison(comparison,scope);
 }
 
