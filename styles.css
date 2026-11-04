@@ -169,3 +169,21 @@ p{line-height:1.55}
 .home-reminders .due-item span{max-width:42%;flex-shrink:0}
 .home-reminders .tiny{margin-top:13px}
 @media(max-width:380px){.home-reminders .due-item{flex-direction:column;align-items:stretch}.home-reminders .due-item span{max-width:none;text-align:left}}
+
+/* v0.8 — fast station reuse and transparent recorded-tariff breakdown */
+.quick-stations-panel{border-color:#2b6261}
+.quick-stations-panel .tiny{margin:0 0 12px}
+.station-shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.station-shortcut{background:#193239;border:1px solid #356b65;border-radius:12px;color:var(--text);text-align:left;padding:12px;display:flex;flex-direction:column;gap:7px;min-height:70px;min-width:0}
+.station-shortcut strong{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.station-shortcut span{color:var(--muted);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.station-shortcut:active{background:#205047}
+.record-actions{flex-wrap:wrap}
+.record-actions button{flex:1;min-width:80px}
+.tariff-list{display:flex;flex-direction:column;gap:9px;margin-top:14px}
+.tariff-row{border:1px solid var(--line);background:#111f32;padding:12px;border-radius:10px}
+.tariff-heading{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.tariff-heading strong{font-size:13px;overflow-wrap:anywhere}
+.tariff-heading .tariff-price{color:var(--accent);flex-shrink:0;white-space:nowrap}
+.tariff-details{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
+@media(max-width:380px){.station-shortcuts{grid-template-columns:1fr}.tariff-heading{flex-direction:column;gap:4px}}

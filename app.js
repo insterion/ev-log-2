@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.7.0
+/* EV Log 2.0 v0.8.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -321,10 +321,86 @@ function loadGarageForm() {
   $('wipers-date').value=extras.wipersDate;
   $('service-next-odo').value=extras.nextServiceOdometerMiles ?? '';
 }
+/* v0.8 — derived shortcuts. No new IndexedDB stores or settings. */
+function recentStationPresets(items=charges,limit=4) {
+  const keys=new Set(),result=[];
+  // Sorted charges already have newest records first; keep explicit sort for testability.
+  for (const item of [...items].sort(sortNewest)) {
+    const key=`${item.type}|${normalizedText(item.station) || '(без име)'}`;
+    if(keys.has(key)) continue;
+    keys.add(key);result.push(item);
+    if(result.length>=limit) break;
+  }
+  return result;
+}
+function reuseChargeStation(item) {
+  if(!item) return notify('Не открих станцията.',true);
+  resetChargeForm();
+  $('type').value=item.type;
+  $('station').value=item.station;
+  $('price').value=String(item.pricePerKwh);
+  // Do not copy old charging quantity, odometer or notes into a new session.
+  $('kwh').value='';$('odometer').value='';$('notes').value='';
+  updatePreview();navigate('charge');
+  notify('Станцията и цената са попълнени. Въведи новите kWh и провери цената.');
+}
+function renderQuickStations() {
+  const target=$('quick-stations');target.replaceChildren();
+  const presets=recentStationPresets();
+  if(!presets.length) {
+    target.append(element('p','small-note','След първото записано зареждане тук ще се появят бързи бутони.'));
+    return;
+  }
+  for(const item of presets) {
+    const btn=element('button','station-shortcut');btn.type='button';
+    btn.append(element('strong','',item.station || TYPE_NAMES[item.type]),
+      element('span','',`${TYPE_NAMES[item.type]} · £${item.pricePerKwh.toFixed(3)}/kWh`));
+    btn.addEventListener('click',()=>reuseChargeStation(item));
+    target.append(btn);
+  }
+}
+function chargeGroupStats(items,keyFn) {
+  const grouped=new Map();
+  for(const item of items) {
+    const key=keyFn(item),prior=grouped.get(key);
+    if(prior) {prior.count++;prior.kwh+=item.kwh;prior.cost+=chargeTotal(item);}
+    else grouped.set(key,{key,label:'',count:1,kwh:item.kwh,cost:chargeTotal(item)});
+  }
+  return [...grouped.values()].map(row=>({...row,average:row.kwh>0?row.cost/row.kwh:null}));
+}
+function chargingBreakdownByType(items) {
+  const rows=chargeGroupStats(items,item=>item.type);
+  return rows.map(row=>({...row,label:TYPE_NAMES[row.key]||row.key}));
+}
+function chargingBreakdownByStation(items) {
+  const names=new Map();
+  const rows=chargeGroupStats(items,item=>{
+    const key=normalizedText(item.station)||'__без_име__';
+    if(!names.has(key)) names.set(key,item.station.trim() || 'Без посочена станция');
+    return key;
+  });
+  return rows.map(row=>({...row,label:names.get(row.key)})).sort((a,b)=>b.kwh-a.kwh||b.cost-a.cost||a.label.localeCompare(b.label,'bg'));
+}
+function renderTariffRows(target,rows,limit=8) {
+  target.replaceChildren();
+  if(!rows.length) {target.append(element('p','small-note','Няма зареждания за избрания период.'));return;}
+  for(const row of rows.slice(0,limit)) {
+    const card=element('div','tariff-row');
+    const top=element('div','tariff-heading');
+    top.append(element('strong','',row.label),element('strong','tariff-price',`£${row.average.toFixed(3)}/kWh`));
+    card.append(top,element('div','tariff-details',`${row.count} зареждания · ${energyFormat(row.kwh)} · ${money(row.cost)} общо`));
+    target.append(card);
+  }
+  if(rows.length>limit)target.append(element('p','small-note',`Още ${rows.length-limit} места не са показани. Експортирай CSV за пълен преглед.`));
+}
 function actionButtons(card,type,id) {
   const row=element('div','record-actions');
   const edit=element('button','','Редактирай'); edit.type='button'; edit.dataset.action='edit'; edit.dataset.id=id;
   const del=element('button','danger','Изтрий'); del.type='button'; del.dataset.action='delete'; del.dataset.id=id;
+  if(type==='charge') {
+    const again=element('button','', '↺ Отново');again.type='button';again.dataset.action='reuse';again.dataset.id=id;
+    row.append(again);
+  }
   row.append(edit,del);card.append(row);
   return card;
 }
@@ -377,6 +453,7 @@ function renderHome() {
   renderList($('recent-list'),charges.slice(0,3),chargeCard,false,'Все още няма зареждания.');
   renderList($('recent-costs'),expenses.slice(0,2),expenseCard,false,'Все още няма други разходи.');
   renderHomeReminders();
+  renderQuickStations();
   $('garage-summary').textContent=garageIsEmpty(garage)?'Добави информация за автомобила и важните срокове.':
     [garage.make,garage.model,garage.registration,garage.odometerMiles===null?'':`${garage.odometerMiles.toLocaleString('en-GB')} mi`].filter(Boolean).join(' · ') || 'В Garage са запазени важни срокове.';
 }
@@ -629,6 +706,8 @@ function renderStats() {
   barChart($('stats-cost-bars'),rows,Math.max(0,...rows.map(x=>x.charging+x.other)),'cost');
   barChart($('stats-energy-bars'),rows,Math.max(0,...rows.map(x=>x.kwh)),'energy');
   renderTypeBreakdown(cs,kwh);
+  renderTariffRows($('stats-price-by-type'),chargingBreakdownByType(cs));
+  renderTariffRows($('stats-price-by-station'),chargingBreakdownByStation(cs));
   renderComparison(comparison,scope);
 }
 
@@ -1032,6 +1111,7 @@ async function onRecordClick(event,kind) {
   const button=event.target.closest('button[data-action]');
   if (!button) return;
   const id=button.dataset.id;
+  if (button.dataset.action==='reuse' && kind==='charge') return reuseChargeStation(charges.find(x=>x.id===id));
   if (button.dataset.action==='edit') return kind==='charge'?editCharge(id):openExpenseForm(id);
   const item=(kind==='charge'?charges:expenses).find(x=>x.id===id);
   if (!item) return;

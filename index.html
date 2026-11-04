@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=070">
+  <link rel="stylesheet" href="./styles.css?v=080">
   <title>EV Log 2.0</title>
-  <script src="./legacy-import.js?v=070" defer></script>
-  <script src="./app.js?v=070" defer></script>
+  <script src="./legacy-import.js?v=080" defer></script>
+  <script src="./app.js?v=080" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v0.7.0</span>
+      <span class="version">v0.8.0</span>
     </header>
 
     <main id="main">
@@ -40,6 +40,11 @@
         <div class="quick-grid">
           <button id="quick-add" class="primary" type="button">＋ Зареждане</button>
           <button id="quick-expense" class="secondary" type="button">＋ Разход</button>
+        </div>
+        <div class="panel quick-stations-panel">
+          <div class="section-heading tight"><h2>⚡ Последни места за зареждане</h2><button class="text-button" type="button" data-go="history">История →</button></div>
+          <p class="tiny">Избери място, за да попълниш типа и последната използвана цена. kWh и километражът остават празни.</p>
+          <div id="quick-stations" class="station-shortcuts" aria-label="Бързо зареждане от използвана станция"></div>
         </div>
         <div class="panel home-reminders"><div class="section-heading tight"><h2>📅 Срокове и обслужване</h2><button class="text-button" type="button" data-go="garage">Garage →</button></div><div id="home-due-list" class="home-due-list" aria-live="polite"><p class="small-note">Зареждане на сроковете…</p></div><p class="tiny">Проверява само ръчно въведените дати и километраж. Няма автоматични известия.</p></div>
         <div class="panel analytics-shortcut"><div class="section-heading tight"><h2>📊 Статистика и EV/ICE</h2><button class="text-button" type="button" data-go="stats">Отвори →</button></div><p>Разходи по месеци, заредени kWh и сравнение с бензин/дизел.</p></div>
@@ -210,6 +215,16 @@
           <div id="stats-energy-bars" class="bar-chart" role="group" aria-label="Месечно заредени kWh"></div>
         </div>
         <div class="panel">
+          <h2>💷 Цена по вид зареждане</h2>
+          <p class="tiny">Претеглена средна цена (£/kWh) от въведените зареждания за избрания период. Не са примерни тарифи.</p>
+          <div id="stats-price-by-type" class="tariff-list" aria-live="polite"></div>
+        </div>
+        <div class="panel">
+          <h2>📍 Зарядни оператори и места</h2>
+          <p class="tiny">Общо kWh, платена сума и средна цена за всяко име на станция. До 8 места с най-много заредени kWh.</p>
+          <div id="stats-price-by-station" class="tariff-list" aria-live="polite"></div>
+        </div>
+        <div class="panel">
           <h2>Видове зареждане</h2><p class="tiny">Дял от заредените kWh за избрания период.</p>
           <div id="stats-type-bars" class="bar-chart type-chart"></div>
         </div>
@@ -263,7 +278,7 @@
         </div>
         <div class="panel">
           <h2>📥 Възстановяване</h2>
-          <p>Избери архив от EV Log 2.0 v0.1–v0.7.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
+          <p>Избери архив от EV Log 2.0 v0.1–v0.8.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
           <label class="file-button" for="import-backup">Избери JSON файл</label>
           <input type="file" id="import-backup" accept=".json,application/json" class="visually-hidden">
           <p class="tiny" id="selected-file">Няма избран файл</p>
@@ -301,7 +316,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v0.7.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v0.8.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
