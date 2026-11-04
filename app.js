@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.1.0
+/* EV Log 2.0 v1.2.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -46,6 +46,7 @@ let garage = emptyGarage();
 let comparison = defaultComparison();
 let comparisonStored = false;
 let chargeEditingId = null;
+let suggestedTariff = null;
 let expenseEditingId = null;
 let toastTimeout;
 let installEvent = null;
@@ -134,6 +135,7 @@ async function refresh() {
   comparisonStored = !!savedComparison;
   comparison = savedComparison ? validateComparison(savedComparison.value) : defaultComparison();
   renderAll();
+  renderChargeHelpers();
 }
 function navigate(view) {
   document.querySelectorAll('.view').forEach(section => {
@@ -205,6 +207,7 @@ function chargeFromForm() {
   if ($('kwh').value.trim() === '' || $('price').value.trim() === '') throw Error('Попълни kWh и цена.');
   const odo = $('odometer').value.trim();
   return validateCharge({
+    ...(prior || {}), // Keep legacy import provenance and unknown optional fields on edits.
     id:prior?.id || newId(),date:$('date').value,type:$('type').value,
     kwh:Number($('kwh').value),pricePerKwh:Number($('price').value),
     odometerMiles:odo === '' ? null : Number(odo),station:$('station').value.trim(),notes:$('notes').value.trim(),
@@ -253,17 +256,93 @@ function resetChargeForm() {
   $('form-subtitle').textContent='Попълни информацията от зарядната станция.';
   $('save-charge').textContent='Запази зареждането';
   $('cancel-edit').textContent='Изчисти формата';
+  renderChargeHelpers();
 }
 function defaultPrice() {
   const type = $('type').value;
   const last = charges.find(r => r.type === type);
   $('price').value=String(last ? last.pricePerKwh : PRICE_HINTS[type]);
   updatePreview();
+  renderStationTariffSuggestion();
+}
+
+/* v1.2 — derived suggestions from saved history; no new IndexedDB keys.
+ * A suggested tariff is NEVER applied while typing: only a button click uses it.
+ */
+function renderStationDatalist() {
+  const list=$('station-suggestions');list.replaceChildren();
+  const seen=new Set();
+  for(const record of charges) {
+    const name=(record.station || '').trim();
+    const key=normalizedText(name);
+    if(!key || seen.has(key))continue;
+    seen.add(key);
+    const option=document.createElement('option');option.value=name;list.append(option);
+    if(seen.size>=100)break;
+  }
+}
+function findSuggestedTariff(records,station,type) {
+  const key=normalizedText(station);
+  if(key) {
+    const record=records.find(item=>normalizedText(item.station)===key);
+    return record ? {record,fromStation:true} : null;
+  }
+  const record=records.find(item=>item.type===type);
+  return record ? {record,fromStation:false} : null;
+}
+function renderStationTariffSuggestion() {
+  const suggestion=findSuggestedTariff(charges,$('station').value,$('type').value);
+  const hint=$('station-tariff-hint');
+  const button=$('use-station-tariff');
+  suggestedTariff=suggestion?.record || null;
+  button.hidden=!suggestion;
+  if(!suggestion) {
+    hint.textContent=$('station').value.trim()
+      ? 'Няма такава станция в историята. Можеш да въведеш актуалната цена ръчно.'
+      : 'Няма записана цена за този тип зареждане. Въведи актуалната тарифа.';
+    return;
+  }
+  const item=suggestion.record;
+  hint.textContent=suggestion.fromStation
+    ? `Последен запис за тази станция: ${fmtDate(item.date)} · ${TYPE_NAMES[item.type]} · £${item.pricePerKwh}/kWh.`
+    : `Последна цена за ${TYPE_NAMES[item.type]}: £${item.pricePerKwh}/kWh (${fmtDate(item.date)}).`;
+  button.textContent=suggestion.fromStation?'↺ Използвай този тип и цена':'↺ Използвай последната цена';
+}
+function chargeEntryWarnings({date,kwh,pricePerKwh,odometerMiles,id}) {
+  const warnings=[];
+  if(dateValid(date) && date>today())warnings.push('Датата е в бъдещето.');
+  if(Number.isFinite(kwh) && kwh>100)warnings.push(`Количество ${kwh} kWh — необичайно голямо за едно зареждане.`);
+  if(Number.isFinite(pricePerKwh) && pricePerKwh>1.25)warnings.push(`Цена £${pricePerKwh}/kWh — провери десетичната запетая и тарифата.`);
+  if(Number.isFinite(kwh) && kwh>0 && Number.isFinite(pricePerKwh) && kwh*pricePerKwh>100)
+    warnings.push(`Изчислената сума ${money(kwh*pricePerKwh)} надвишава £100.`);
+  if(Number.isInteger(odometerMiles) && odometerMiles>=0 && dateValid(date)) {
+    const previous=charges.find(item=>item.id!==id && Number.isInteger(item.odometerMiles) && item.odometerMiles>=0 && item.date<=date);
+    if(previous && odometerMiles<previous.odometerMiles)
+      warnings.push(`Километражът (${odometerMiles} mi) е под записаните ${previous.odometerMiles} mi от ${fmtDate(previous.date)}.`);
+  }
+  return warnings;
+}
+function entryWarningsFromForm() {
+  const amount=$('kwh').value.trim();const price=$('price').value.trim();const odo=$('odometer').value.trim();
+  return chargeEntryWarnings({
+    date:$('date').value, kwh:amount===''?NaN:Number(amount),
+    pricePerKwh:price===''?NaN:Number(price),odometerMiles:odo===''?null:Number(odo),id:chargeEditingId
+  });
 }
 function updatePreview() {
-  const kwh = Number($('kwh').value);
-  const price = Number($('price').value);
-  $('preview-total').textContent = Number.isFinite(kwh*price) && kwh > 0 && price >= 0 ? money(kwh*price) : '£0.00';
+  const rawKwh=$('kwh').value.trim(),rawPrice=$('price').value.trim();
+  const kwh=rawKwh===''?NaN:Number(rawKwh),price=rawPrice===''?NaN:Number(rawPrice);
+  const valid=Number.isFinite(kwh) && kwh>0 && kwh<=1000 && Number.isFinite(price) && price>=0 && price<=10;
+  $('preview-total').textContent=valid?money(kwh*price):'—';
+  const warnings=entryWarningsFromForm();
+  const box=$('charge-entry-warnings');box.replaceChildren();box.hidden=!warnings.length;
+  if(warnings.length){
+    box.append(element('strong','','⚠ Провери преди запис:'));
+    for(const message of warnings)box.append(element('p','',message));
+  }
+}
+function renderChargeHelpers() {
+  renderStationDatalist();renderStationTariffSuggestion();updatePreview();
 }
 function editCharge(id) {
   const item=charges.find(x=>x.id===id);
@@ -276,7 +355,7 @@ function editCharge(id) {
   $('form-subtitle').textContent='Промени полетата и запази.';
   $('save-charge').textContent='Запази промените';
   $('cancel-edit').textContent='Откажи редакцията';
-  updatePreview(); navigate('charge');
+  renderChargeHelpers(); navigate('charge');
 }
 function resetExpenseForm() {
   expenseEditingId=null;
@@ -343,7 +422,7 @@ function reuseChargeStation(item) {
   $('price').value=String(item.pricePerKwh);
   // Do not copy old charging quantity, odometer or notes into a new session.
   $('kwh').value='';$('odometer').value='';$('notes').value='';
-  updatePreview();navigate('charge');
+  renderChargeHelpers();navigate('charge');
   notify('Станцията и цената са попълнени. Въведи новите kWh и провери цената.');
 }
 function renderQuickStations() {
@@ -1303,18 +1382,29 @@ function attachEvents() {
   $('month-next').addEventListener('click',()=>moveOverviewMonth(1));
   $('month-today').addEventListener('click',()=>{overviewMonth=today().slice(0,7);renderHome();});
   $('type').addEventListener('change',defaultPrice);
-  $('kwh').addEventListener('input',updatePreview);$('price').addEventListener('input',updatePreview);
+  $('station').addEventListener('input',renderStationTariffSuggestion);
+  $('use-station-tariff').addEventListener('click',()=>{
+    if(!suggestedTariff)return;
+    $('type').value=suggestedTariff.type;
+    $('price').value=String(suggestedTariff.pricePerKwh);
+    renderStationTariffSuggestion();updatePreview();
+    notify('Приложих последната записана цена. Провери дали още е актуална.');
+  });
+  for(const field of ['kwh','price','odometer','date'])$(field).addEventListener('input',updatePreview);
   $('charge-form').addEventListener('submit',async event=>{
     event.preventDefault();const b=$('save-charge');
-    try {const item=chargeFromForm();if(!confirmExactDuplicate(item,'charge'))return;b.disabled=true;await saveCharge(item);await refresh();resetChargeForm();navigate('home');notify('Зареждането е запазено.');}
+    try {
+      const item=chargeFromForm();
+      const warnings=chargeEntryWarnings(item);
+      if(warnings.length && !confirm(`Провери следното преди запис:\n\n${warnings.map(w=>'• '+w).join('\n')}\n\nСигурен ли си, че записът е правилен?`))return;
+      if(!confirmExactDuplicate(item,'charge'))return;
+      b.disabled=true;await saveCharge(item);await refresh();resetChargeForm();navigate('home');notify('Зареждането е запазено.');
+    }
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('same-as-last').addEventListener('click',()=>{
-    if (!charges.length) return notify('Няма предишно зареждане.',true);
-    const last=charges[0];resetChargeForm();
-    $('type').value=last.type;$('kwh').value=last.kwh;$('price').value=last.pricePerKwh;
-    $('station').value=last.station;$('notes').value=last.notes;updatePreview();
-    notify('Попълнено от последното. Провери и запази.');
+    if(!charges.length)return notify('Няма предишно зареждане.',true);
+    reuseChargeStation(charges[0]); // Never copy last session's kWh/odometer/notes.
   });
   $('cancel-edit').addEventListener('click',resetChargeForm);
   $('history-filter').addEventListener('change',renderHistory);

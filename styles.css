@@ -220,3 +220,12 @@ p{line-height:1.55}
 .month-pager button:disabled{opacity:.45}
 .history-clear{width:100%;margin:2px 0 14px;min-height:44px}
 @media(max-width:360px){.month-pager{gap:4px}.month-pager .secondary{font-size:11px;padding:9px 3px}.month-pager .text-button{font-size:11px}}
+
+/* v1.2 — explicit station/tariff suggestions and live outlier review. */
+.tariff-suggestion{display:flex;flex-direction:column;gap:10px;margin:-4px 0 14px;padding:12px;border:1px solid #2e5c62;border-radius:12px;background:#112734}
+.tariff-suggestion .small-note{line-height:1.55}
+.tariff-suggestion button{width:100%;min-height:44px;white-space:normal;text-align:center}
+.tariff-suggestion button[hidden],.charge-entry-warnings[hidden]{display:none}
+.charge-entry-warnings{border:1px solid #ad873c;background:#302919;color:#ffe2a4;border-radius:11px;padding:12px 14px;margin:12px 0;font-size:12px;line-height:1.5}
+.charge-entry-warnings strong{display:block;margin:0 0 6px;font-size:13px}
+.charge-entry-warnings p{margin:4px 0}
