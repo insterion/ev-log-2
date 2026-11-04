@@ -1,8 +1,8 @@
 'use strict';
-// EV Log 2.0 v0.3 — offline files only; local IndexedDB is never cached or sent online.
-const CACHE_NAME = 'ev-log-2-shell-v03';
+// EV Log 2.0 v0.4 — offline files only; local IndexedDB is never cached or sent online.
+const CACHE_NAME = 'ev-log-2-shell-v04';
 const PREFIX = 'ev-log-2-shell-';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon-192.png', './icon-512.png'];
+const SHELL = ['./', './index.html', './styles.css', './app.js', './legacy-import.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));

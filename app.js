@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.3
+/* EV Log 2.0 v0.4
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -161,6 +161,7 @@ function validateExpense(raw) {
   if (!Object.hasOwn(COST_NAMES,raw.category)) throw Error('Избери категория на разхода.');
   if (!numeric(raw.amount) || raw.amount < 0 || raw.amount > 1000000) throw Error('Сумата трябва да е между £0 и £1,000,000.');
   if (!optionalOdo(raw.odometerMiles)) throw Error('Невалиден километраж за разхода.');
+  if (raw.target !== undefined && !['ev','ice','both','other'].includes(raw.target)) throw Error('Невалиден автомобил към разхода.');
   textField(raw.title,120,'описание'); textField(raw.notes,500,'бележки');
   if (!raw.title.trim()) throw Error('Въведи описание на разхода.');
   return raw;
@@ -198,7 +199,7 @@ function expenseFromForm() {
   return validateExpense({
     id:prior?.id || newId(),date:$('expense-date').value,
     amount:roundPence(Number($('expense-amount').value)),category:$('expense-category').value,
-    title:$('expense-title').value.trim(),odometerMiles:odo === '' ? null : Number(odo),
+    title:$('expense-title').value.trim(),target:$('expense-target').value,odometerMiles:odo === '' ? null : Number(odo),
     notes:$('expense-notes').value.trim(),createdAt:prior?.createdAt || new Date().toISOString(),updatedAt:new Date().toISOString()
   });
 }
@@ -250,7 +251,7 @@ function resetExpenseForm() {
   expenseEditingId=null;
   $('expense-form').reset();
   $('expense-date').value=today();
-  $('expense-category').value='service';
+  $('expense-category').value='service';$('expense-target').value='ev';
   $('expense-form-title').textContent='Нов разход';
   $('save-expense').textContent='Запази разхода';
 }
@@ -262,7 +263,7 @@ function openExpenseForm(id=null) {
     expenseEditingId=item.id;
     $('expense-date').value=item.date;
     $('expense-amount').value=item.amount;
-    $('expense-category').value=item.category;
+    $('expense-category').value=item.category;$('expense-target').value=item.target || 'ev';
     $('expense-title').value=item.title;
     $('expense-odometer').value=item.odometerMiles ?? '';
     $('expense-notes').value=item.notes;
@@ -307,7 +308,7 @@ function expenseCard(item,withActions=false) {
   heading.append(element('div','record-title',item.title),element('div','record-date',fmtDate(item.date)));
   top.append(heading,element('div','record-value',money(item.amount)));card.append(top);
   const chips=element('div','record-meta');
-  [COST_NAMES[item.category],...(item.odometerMiles===null?[]:[item.odometerMiles.toLocaleString('en-GB')+' mi'])].forEach(t=>chips.append(element('span','',t)));
+  [COST_NAMES[item.category],TARGET_NAMES[item.target||'ev'],...(item.odometerMiles===null?[]:[item.odometerMiles.toLocaleString('en-GB')+' mi'])].forEach(t=>chips.append(element('span','',t)));
   card.append(chips);
   if (item.notes) card.append(element('p','record-note',item.notes));
   if (withActions) actionButtons(card,'cost',item.id);
@@ -358,7 +359,8 @@ function renderHistory() {
 function renderCosts() {
   renderMonthFilter($('costs-filter'),expenses);
   const selected=$('costs-filter').value;
-  const items=selected==='all'?expenses:expenses.filter(x=>x.date.startsWith(selected));
+  const category=$('cost-target-filter').value;
+  const items=expenses.filter(x=>(selected==='all'||x.date.startsWith(selected)) && (category==='all'||(x.target||'ev')===category));
   $('costs-summary').textContent=`${items.length} разхода`;
   $('costs-sum').textContent=money(items.reduce((sum,x)=>sum+x.amount,0));
   renderList($('costs-list'),items,expenseCard,true,'Няма други разходи за периода.');
@@ -539,7 +541,7 @@ function renderAll() {
   $('backup-count').textContent=`В момента: ${charges.length} зареждания, ${expenses.length} други разхода${garageIsEmpty(garage)?', Garage е празен.':', Garage е попълнен.'}`;
 }
 function chargeSignature(x) {return [x.date,x.odometerMiles??'',x.type,x.kwh,x.pricePerKwh,x.station.trim().toLowerCase(),x.notes.trim().toLowerCase()].join('\u001f');}
-function expenseSignature(x) {return [x.date,x.amount,x.category,x.title.trim().toLowerCase(),x.odometerMiles??'',x.notes.trim().toLowerCase()].join('\u001f');}
+function expenseSignature(x) {return [x.date,x.amount,x.category,x.target||'ev',x.title.trim().toLowerCase(),x.odometerMiles??'',x.notes.trim().toLowerCase()].join('\u001f');}
 function validateBackup(data) {
   if (!data || data.format!==BACKUP_FORMAT || ![1,2].includes(data.version) || !Array.isArray(data.charges)) throw Error('Файлът не е валиден архив от EV Log 2.0 (v0.1 или v0.2).');
   if (data.charges.length>100000) throw Error('Прекалено много зареждания в архива.');
@@ -604,6 +606,197 @@ async function importBackup(file) {
   await refresh();loadGarageForm();loadComparisonForm();
   notify(`Импортирани: ${newCharges.length} зареждания, ${newCosts.length} разходи${addGarage?' и Garage':''}.`);
 }
+/* --------------------- v0.4: legacy merger (preview-first) --------------------- */
+let stagedLegacy = null;
+const VALID_TARGETS = ['ev','ice','both','other'];
+const TARGET_NAMES = {ev:'EV',ice:'ICE',both:'И двата',other:'Неуточнен'};
+const normalizedText = s => String(s ?? '').trim().replace(/\s+/g,' ').toLowerCase();
+function legacyBase(item) {
+  const r=item.record;
+  if(item.kind==='charge')return ['charge',r.date,r.kwh.toFixed(3),r.pricePerKwh.toFixed(4)].join('|');
+  return ['cost',r.date,r.amount.toFixed(2),r.category].join('|');
+}
+function legacyKey(item,counter) {
+  if(item.originalId) return `${item.source}:${item.kind}:id:${item.originalId}`;
+  const r=item.record;
+  const shape=item.kind==='charge'?[r.date,r.kwh,r.pricePerKwh,r.type,r.odometerMiles,r.notes]:[r.date,r.amount,r.category,r.target,r.title,r.notes];
+  const raw=JSON.stringify(shape);let hash=2166136261;
+  for(let i=0;i<raw.length;i++){hash^=raw.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  const first=`${item.source}:${item.kind}:row:${(hash>>>0).toString(16)}`;
+  const count=(counter.get(first)||0)+1;counter.set(first,count);
+  return `${first}:${count}`;
+}
+function dbSnapshot() {
+  return JSON.stringify([
+    ...charges.map(x=>`c:${x.id}:${x.updatedAt||''}`),
+    ...expenses.map(x=>`e:${x.id}:${x.updatedAt||''}`)
+  ].sort());
+}
+function legacyNearMatch(a,b,kind) {
+  if (kind==='charge') {
+    const nearKwh=Math.abs(a.kwh-b.kwh)<=Math.max(0.2,a.kwh*0.02);
+    const nearPrice=Math.abs(a.pricePerKwh-b.pricePerKwh)<=0.03;
+    const nearTotal=Math.abs(chargeTotal(a)-chargeTotal(b))<=0.50;
+    const dayGap=Math.abs(new Date(a.date+'T12:00:00Z')-new Date(b.date+'T12:00:00Z'))/86400000;
+    return (dayGap===0 && ((nearKwh && nearPrice)||(nearKwh && nearTotal))) || (dayGap===1 && nearKwh && nearPrice);
+  }
+  if(a.date!==b.date)return false;
+  return Math.abs(a.amount-b.amount)<0.005 || (Math.abs(a.amount-b.amount)<=0.50 && normalizedText(a.title)===normalizedText(b.title));
+}
+function legacyDisplay(item) {
+  const r=item.record;
+  if(item.kind==='charge') return `⚡ ${fmtDate(r.date)} · ${r.kwh} kWh × £${r.pricePerKwh}/kWh · ${money(chargeTotal(r))}`;
+  return `£ ${fmtDate(r.date)} · ${money(r.amount)} · ${COST_NAMES[r.category]} · ${TARGET_NAMES[r.target]}`;
+}
+function countLegacy() {
+  if (!stagedLegacy) return;
+  const add=stagedLegacy.items.filter(x=>x.choice==='add');
+  const c=add.filter(x=>x.kind==='charge').length;
+  const e=add.length-c;
+  const skip=stagedLegacy.items.length-add.length;
+  $('legacy-summary').textContent=`Открити ${stagedLegacy.items.length} записа · избрани ${c} зареждания и ${e} разхода · пропуснати ${skip}. Нищо не е записано досега.`;
+  $('legacy-commit').disabled=!$('legacy-ack').checked || !add.length;
+}
+function renderLegacyPreview() {
+  const root=$('legacy-review');root.replaceChildren();
+  if(!stagedLegacy)return;
+  const groups=[
+    {key:'review',title:'⚠ За проверка / възможни дубликати',items:stagedLegacy.items.filter(x=>x.status!=='new'),open:true},
+    {key:'new',title:'✓ Нови записи (можеш да ги прегледаш)',items:stagedLegacy.items.filter(x=>x.status==='new'),open:false}
+  ];
+  for(const g of groups) {
+    const d=document.createElement('details');d.open=g.open;
+    const sum=document.createElement('summary');sum.textContent=`${g.title}: ${g.items.length}`;d.append(sum);
+    if(!g.items.length)d.append(element('p','small-note','Няма записи в тази група.'));
+    for(const item of g.items) {
+      const box=element('div','legacy-record');
+      box.append(element('strong','',legacyDisplay(item)));
+      box.append(element('small','',`${item.source==='old-json'?'Първо приложение (JSON)':item.source==='old-csv'?'Първо приложение (CSV)':'Второ приложение (CSV)'} · запис ${item.line}`));
+      box.append(element('small','',item.record.notes ? `Бележка: ${item.record.notes}` : 'Без бележка'));
+      if (item.status!=='new')box.append(element('small','legacy-warning',item.reason));
+      for(const warning of item.warnings)box.append(element('small','legacy-warning','⚠ '+warning));
+      const select=element('select');select.setAttribute('aria-label','Решение за '+legacyDisplay(item));
+      select.append(new Option('✅ Добави', 'add'),new Option('⏭ Пропусни','skip'));
+      select.value=item.choice;
+      select.addEventListener('change',()=>{item.choice=select.value;countLegacy();});
+      box.append(select);d.append(box);
+    }
+    root.append(d);
+  }
+  $('legacy-preview-panel').hidden=false;
+  countLegacy();
+}
+async function prepareLegacyPreview() {
+  const filenames=[...$('legacy-files').files];
+  const pasted=$('legacy-json').value.trim();
+  if(!filenames.length && !pasted)throw Error('Избери CSV / JSON файл или постави JSON текста от първото приложение.');
+  if(filenames.length>10)throw Error('Избери до 10 файла наведнъж.');
+  const results=[];
+  for(const file of filenames) {
+    if(file.size>12*1024*1024)throw Error(`Файлът ${file.name} е над 12 MB.`);
+    const data=await file.text();
+    if(file.name.toLowerCase().endsWith('.csv')) results.push(EVLegacy.parseCSV(data,file.name));
+    else if(file.name.toLowerCase().endsWith('.json')) results.push(EVLegacy.parseOldJson(data));
+    else throw Error('Използвай само .csv или .json файлове.');
+  }
+  if(pasted)results.push(EVLegacy.parseOldJson(pasted));
+  const errors=results.flatMap(x=>x.errors.map(e=>`${x.filename}: ${e}`));
+  if(errors.length)throw Error(`${errors.length} невалидни записа. Нищо не е заредено.\n${errors.slice(0,10).join('\n')}${errors.length>10?'\n…':''}`);
+  const all=results.flatMap(x=>x.items);
+  if(!all.length)throw Error('Файловете не съдържат записи.');
+  if(all.length>2000)throw Error('Над 2000 записа. Импортирай файловете поотделно.');
+  await refresh();
+  const seen=new Map(),byDate=new Map(),keys=new Set(),counter=new Map();
+  const remember=(kind,r)=>{const day=kind+':'+r.date;if(!byDate.has(day))byDate.set(day,[]);byDate.get(day).push(r);};
+  for(const item of charges) {
+    const base=legacyBase({kind:'charge',record:item});
+    if(!seen.has(base))seen.set(base,[]);
+    seen.get(base).push(item);remember('charge',item);
+    if(item.importKey)keys.add('charge:'+item.importKey);
+  }
+  for(const item of expenses) {
+    const base=legacyBase({kind:'cost',record:item});
+    if(!seen.has(base))seen.set(base,[]);
+    seen.get(base).push(item);remember('cost',item);
+    if(item.importKey)keys.add('cost:'+item.importKey);
+  }
+  for(const item of all) {
+    item.importKey=legacyKey(item,counter);
+    const base=legacyBase(item);
+    const similar=seen.get(base)||[];
+    const sameDay=byDate.get(item.kind+':'+item.record.date)||[];
+    const nearby=similar.length?[]:sameDay.filter(x=>legacyNearMatch(item.record,x,item.kind));
+    const idSeen=keys.has(item.kind+':'+item.importKey);
+    const warning=item.warnings.length>0;
+    item.status=idSeen?'imported':similar.length?'similar':nearby.length?'near':warning?'warning':'new';
+    item.reason=idSeen?'Този стар запис вече е импортиран.':similar.length?`Възможно повторение: същата дата и ${item.kind==='charge'?'kWh + цена':'сума + категория'}. Провери дали не е отделно събитие.`:nearby.length?'Възможно сходен запис (близки стойности/дата). Провери го ръчно.':warning?'Провери предупреждението за преобразуването.':'';
+    item.choice=item.status==='new'?'add':'skip';
+    if(!seen.has(base))seen.set(base,[]);
+    seen.get(base).push(item.record);remember(item.kind,item.record);
+    keys.add(item.kind+':'+item.importKey);
+  }
+  stagedLegacy={items:all,snapshot:dbSnapshot()};
+  $('legacy-ack').checked=false;
+  renderLegacyPreview();
+  $('legacy-status').textContent=`Прегледът е готов. Първо провери възможните дубликати, после новите записи. Нищо не е записано.`;
+  $('legacy-preview-panel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function commitLegacy() {
+  if(!stagedLegacy)throw Error('Първо подготви прегледа.');
+  if(!$('legacy-ack').checked)throw Error('Първо направи JSON backup и отбележи полето.');
+  await refresh();
+  if(dbSnapshot()!==stagedLegacy.snapshot)throw Error('Записите са променени след прегледа. Повтори проверката, преди да продължиш.');
+  const selected=stagedLegacy.items.filter(x=>x.choice==='add');
+  if(!selected.length)throw Error('Няма избрани записи за добавяне.');
+  const c=selected.filter(x=>x.kind==='charge').length, e=selected.length-c;
+  const risky=selected.filter(x=>x.status!=='new').length;
+  if(!confirm(`EV Log 2.0 — последна проверка\n\nНови зареждания: ${c}\nНови други разходи: ${e}\nОт тях ${risky} бяха маркирани като възможни повторения/за проверка.\n\nСъществуващите записи НЯМА да се заменят.\nПродължаваме ли?`))return;
+  const stamp=new Date().toISOString();
+  const insert=selected.map(item=>{
+    const record={...item.record,id:newId(),importKey:item.importKey,importedAt:stamp,createdAt:stamp,updatedAt:stamp};
+    if(item.kind==='charge')validateCharge(record); else validateExpense(record);
+    return {kind:item.kind,record};
+  });
+  await transaction([STORE_CHARGES,STORE_META],tx=>{
+    const a=tx.objectStore(STORE_CHARGES),b=tx.objectStore(STORE_META);
+    for(const item of insert) {
+      if(item.kind==='charge')a.add(item.record);
+      else b.add({key:EXPENSE_PREFIX+item.record.id,value:item.record});
+    }
+  });
+  stagedLegacy=null;
+  $('legacy-preview-panel').hidden=true;
+  $('legacy-files').value='';$('legacy-json').value='';$('legacy-filenames').textContent='Няма избрани файлове';
+  await refresh();
+  $('legacy-status').textContent=`✅ Добавени ${c} зареждания и ${e} други разхода. Създай нов пълен JSON backup от EV Log 2.0.`;
+  notify(`Добавени ${c} зареждания и ${e} разхода. Направи нов backup.`);
+}
+function bindLegacyEvents() {
+  $('legacy-files').addEventListener('change',()=>{
+    const names=[...$('legacy-files').files].map(x=>x.name);
+    $('legacy-filenames').textContent=names.length?names.join(', '):'Няма избрани файлове';
+    stagedLegacy=null;$('legacy-preview-panel').hidden=true;
+  });
+  $('legacy-json').addEventListener('input',()=>{stagedLegacy=null;$('legacy-preview-panel').hidden=true;});
+  $('legacy-preview').addEventListener('click',async()=>{
+    $('legacy-preview').disabled=true;stagedLegacy=null;$('legacy-preview-panel').hidden=true;
+    try{await prepareLegacyPreview();}
+    catch(e){$('legacy-status').textContent='❌ '+e.message;notify('Неуспешна проверка — виж подробностите.',true);}
+    finally{$('legacy-preview').disabled=false;}
+  });
+  $('legacy-ack').addEventListener('change',countLegacy);
+  $('legacy-commit').addEventListener('click',async()=>{
+    $('legacy-commit').disabled=true;
+    try{await commitLegacy();}
+    catch(e){$('legacy-status').textContent='❌ '+e.message;notify('Импортът е спрян: '+e.message,true);}
+    finally{if(stagedLegacy)countLegacy();}
+  });
+  $('legacy-reset').addEventListener('click',()=>{
+    stagedLegacy=null;$('legacy-preview-panel').hidden=true;$('legacy-status').textContent='Прегледът е отменен. Данните не са променени.';
+  });
+}
+/* --------------------------- end legacy merger --------------------------- */
+
 async function onRecordClick(event,kind) {
   const button=event.target.closest('button[data-action]');
   if (!button) return;
@@ -657,6 +850,7 @@ function attachEvents() {
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('costs-filter').addEventListener('change',renderCosts);
+  $('cost-target-filter').addEventListener('change',renderCosts);
   $('stats-period').addEventListener('change',renderStats);
   $('compare-price-mode').addEventListener('change',()=>{updateManualPriceVisibility();try{renderComparison(comparisonFromForm());}catch(_){}});
   $('comparison-form').addEventListener('input',()=>{try{renderComparison(comparisonFromForm());}catch(_){}});
@@ -679,6 +873,7 @@ function attachEvents() {
     $('selected-file').textContent=file.name;
     try {await importBackup(file);}catch(error){notify(error.message,true);}finally{event.target.value='';}
   });
+  bindLegacyEvents();
   $('install-cta').addEventListener('click',async()=>{
     if(!installEvent)return;
     const event=installEvent;installEvent=null;updatePwaStatus();

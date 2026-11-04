@@ -116,3 +116,22 @@ p{line-height:1.55}
 .panel .compare-highlight p{margin:6px 0 0}
 .compare-disclaimer{font-size:12px;color:var(--muted);line-height:1.55;padding:0 3px 20px}
 @media(max-width:390px){.nav-item small{font-size:9px}.nav-item{padding:6px 1px}.nav-item span{font-size:21px}.stats-detail .stat-card strong{font-size:19px}}
+
+/* v0.4: conservative legacy import preview and per-record decision controls */
+.legacy-panel{border-color:#386f70}
+.legacy-panel .legacy-upload{border:1px solid #3e827a;background:#18383d;color:#dafaf0;border-radius:12px;padding:15px;font-weight:750;margin:14px 0 3px}
+.legacy-panel h3{margin:20px 0 10px;font-size:18px}
+.legacy-panel #legacy-preview{width:100%}
+.legacy-panel #legacy-status{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}
+.legacy-review{max-height:65vh;overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:14px}
+.legacy-review details{margin:10px 0;border:1px solid var(--line);border-radius:10px;padding:9px}
+.legacy-review summary{font-weight:700;cursor:pointer;font-size:14px}
+.legacy-record{border-bottom:1px solid var(--line);padding:10px 2px}
+.legacy-record:last-child{border-bottom:0}
+.legacy-record strong{display:block;font-size:13px;line-height:1.5}
+.legacy-record small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere;line-height:1.5}
+.legacy-record select{width:100%;min-height:42px;border:1px solid var(--line);color:var(--text);background:var(--surface2);border-radius:9px;margin-top:8px;padding:8px}
+.legacy-warning{color:#f3d696!important}
+.legacy-confirm{display:flex;gap:12px;align-items:center;border:1px solid var(--line);padding:14px;border-radius:12px;font-size:13px;line-height:1.5;margin-bottom:12px}
+.legacy-confirm input{width:22px;height:22px;flex-shrink:0}
+#legacy-commit,#legacy-reset{width:100%;margin-bottom:9px}
