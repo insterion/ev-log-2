@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.6.0
+/* EV Log 2.0 v0.7.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -54,7 +54,7 @@ function defaultComparison() {
   return {distanceMiles:100,efficiencyMiKwh:3.5,iceMpgUk:45,fuelPriceLitre:1.50,priceMode:'history',manualPriceKwh:0.56};
 }
 function emptyGarageExtras() {
-  return {vin:'',tyresInstalledDate:'',tyresOdometerMiles:null,tyresNote:'',battery12vDate:'',cabinFilterDate:'',wipersDate:''};
+  return {vin:'',tyresInstalledDate:'',tyresOdometerMiles:null,tyresNote:'',battery12vDate:'',cabinFilterDate:'',wipersDate:'',nextServiceOdometerMiles:null};
 }
 function emptyGarage() {
   return {make:'',model:'',year:null,registration:'',odometerMiles:null,notes:'',due:{mot:'',insurance:'',tax:'',service:''},extras:emptyGarageExtras()};
@@ -187,6 +187,7 @@ function validateGarage(raw) {
   const extras={...emptyGarageExtras(),...(raw.extras || {})};
   textField(extras.vin,25,'VIN');textField(extras.tyresNote,200,'гуми');
   if (!optionalOdo(extras.tyresOdometerMiles)) throw Error('Невалиден километраж при монтаж на гуми.');
+  if (!optionalOdo(extras.nextServiceOdometerMiles)) throw Error('Невалиден километраж за следващ service.');
   for (const key of ['tyresInstalledDate','battery12vDate','cabinFilterDate','wipersDate']) {
     if (typeof extras[key] !== 'string' || (extras[key] && !dateValid(extras[key]))) throw Error('Невалидна дата в консумативите.');
   }
@@ -195,7 +196,7 @@ function validateGarage(raw) {
 function garageIsEmpty(profile) {
   const e={...emptyGarageExtras(),...(profile.extras || {})};
   return !profile.make && !profile.model && !profile.registration && profile.year === null && profile.odometerMiles === null && !profile.notes && !Object.values(profile.due).some(Boolean) &&
-    !e.vin && !e.tyresInstalledDate && e.tyresOdometerMiles === null && !e.tyresNote && !e.battery12vDate && !e.cabinFilterDate && !e.wipersDate;
+    !e.vin && !e.tyresInstalledDate && e.tyresOdometerMiles === null && !e.tyresNote && !e.battery12vDate && !e.cabinFilterDate && !e.wipersDate && e.nextServiceOdometerMiles === null;
 }
 function chargeFromForm() {
   const prior = chargeEditingId ? charges.find(x => x.id === chargeEditingId) : null;
@@ -225,6 +226,7 @@ function garageFromForm() {
   const due = {};
   for (const key of Object.keys(DUE_NAMES)) due[key] = $(`due-${key}`).value;
   const tyresOdo=$('tyres-odo').value.trim();
+  const nextServiceOdo=$('service-next-odo').value.trim();
   return validateGarage({
     make:$('vehicle-make').value.trim(),model:$('vehicle-model').value.trim(),
     year:year === '' ? null : Number(year),registration:$('vehicle-reg').value.trim().toUpperCase(),
@@ -236,7 +238,8 @@ function garageFromForm() {
       tyresNote:$('tyres-note').value.trim(),
       battery12vDate:$('battery-12v-date').value,
       cabinFilterDate:$('cabin-filter-date').value,
-      wipersDate:$('wipers-date').value
+      wipersDate:$('wipers-date').value,
+      nextServiceOdometerMiles:nextServiceOdo === '' ? null : Number(nextServiceOdo)
     }
   });
 }
@@ -316,6 +319,7 @@ function loadGarageForm() {
   $('battery-12v-date').value=extras.battery12vDate;
   $('cabin-filter-date').value=extras.cabinFilterDate;
   $('wipers-date').value=extras.wipersDate;
+  $('service-next-odo').value=extras.nextServiceOdometerMiles ?? '';
 }
 function actionButtons(card,type,id) {
   const row=element('div','record-actions');
@@ -372,6 +376,7 @@ function renderHome() {
   $('month-count').textContent=String(monthCharges.length);
   renderList($('recent-list'),charges.slice(0,3),chargeCard,false,'Все още няма зареждания.');
   renderList($('recent-costs'),expenses.slice(0,2),expenseCard,false,'Все още няма други разходи.');
+  renderHomeReminders();
   $('garage-summary').textContent=garageIsEmpty(garage)?'Добави информация за автомобила и важните срокове.':
     [garage.make,garage.model,garage.registration,garage.odometerMiles===null?'':`${garage.odometerMiles.toLocaleString('en-GB')} mi`].filter(Boolean).join(' · ') || 'В Garage са запазени важни срокове.';
 }
@@ -405,20 +410,64 @@ function renderCosts() {
   renderList($('costs-list'),items,expenseCard,true,'Няма други разходи за периода.');
 }
 function daysUntil(date) {
-  const start=new Date(`${today()}T12:00:00`);
-  const end=new Date(`${date}T12:00:00`);
-  return Math.round((end-start)/86400000);
+  const [sy,sm,sd]=today().split('-').map(Number);
+  const [ey,em,ed]=date.split('-').map(Number);
+  return Math.round((Date.UTC(ey,em-1,ed)-Date.UTC(sy,sm-1,sd))/86400000);
+}
+function garageDueItems() {
+  const deadlines=Object.entries(DUE_NAMES)
+    .filter(([key])=>garage.due[key])
+    .map(([key,label])=>({kind:'date',key,label,date:garage.due[key],days:daysUntil(garage.due[key])}));
+  const next=garage.extras?.nextServiceOdometerMiles;
+  if (Number.isInteger(next) && next >= 0) {
+    const current=garage.odometerMiles;
+    const remaining=Number.isInteger(current) && current >= 0 ? next-current : null;
+    deadlines.push({kind:'mileage',key:'service-odo',label:'Service по пробег',miles:next,remaining});
+  }
+  // Overdue and upcoming items first; unknown current odometer at the end.
+  return deadlines.sort((a,b)=>{
+    const aRank=a.kind==='date'?a.days:(a.remaining===null?Infinity:a.remaining<=0?-1: a.remaining<=500?7:90);
+    const bRank=b.kind==='date'?b.days:(b.remaining===null?Infinity:b.remaining<=0?-1: b.remaining<=500?7:90);
+    return aRank-bRank;
+  });
+}
+function duePresentation(item) {
+  if(item.kind==='mileage') {
+    const label=`${item.label} · ${item.miles.toLocaleString('en-GB')} mi`;
+    if(item.remaining===null) return {label,status:'Въведи текущ километраж в Garage',level:'normal'};
+    if(item.remaining<0) return {label,status:`Надвишен с ${Math.abs(item.remaining).toLocaleString('en-GB')} mi`,level:'expired'};
+    if(item.remaining===0) return {label,status:'Достигнат километраж',level:'expired'};
+    if(item.remaining<=500) return {label,status:`Остават ${item.remaining.toLocaleString('en-GB')} mi`,level:'near'};
+    return {label,status:`Остават ${item.remaining.toLocaleString('en-GB')} mi`,level:'normal'};
+  }
+  const label=`${item.label} · ${fmtDate(item.date)}`;
+  if(item.days<0) return {label,status:`Просрочен с ${Math.abs(item.days)} дни`,level:'expired'};
+  if(item.days===0) return {label,status:'Днес',level:'near'};
+  if(item.days<=30) return {label,status:`След ${item.days} дни`,level:'near'};
+  return {label,status:`След ${item.days} дни`,level:'normal'};
+}
+function renderHomeReminders() {
+  const container=$('home-due-list');container.replaceChildren();
+  const all=garageDueItems();
+  if(!all.length){container.append(element('p','small-note','Няма въведени срокове. Добави MOT, insurance, tax или service в Garage.'));return;}
+  all.slice(0,4).forEach(item=>{
+    const display=duePresentation(item);
+    const row=element('div',`due-item ${display.level}`);
+    row.append(element('strong','',display.label),element('span','',display.status));
+    container.append(row);
+  });
+  if(all.length>4) container.append(element('p','small-note',`Още ${all.length-4} срока се виждат в Garage.`));
 }
 function renderGarage() {
   const box=$('garage-alerts'); box.replaceChildren();
-  const deadlines=Object.entries(DUE_NAMES).filter(([key])=>garage.due[key]).map(([key,label])=>({key,label,date:garage.due[key],days:daysUntil(garage.due[key])})).sort((a,b)=>a.days-b.days);
+  const deadlines=garageDueItems();
   if (!deadlines.length) {
-    box.append(element('p','small-note','Няма въведени срокове. Те не се проверяват от DVLA или застраховател — въведи ги по документи.'));
+    box.append(element('p','small-note','Няма въведени срокове. Не ги проверяваме чрез DVLA или застраховател — въведи ги по документи.'));
   } else {
     deadlines.forEach(item => {
-      const status=item.days<0?'Изтекъл срок':item.days===0?'Днес':item.days<=30?`След ${item.days} дни`:'Предстоящ';
-      const alert=element('div',`due-item ${item.days<0?'expired':item.days<=30?'near':'normal'}`);
-      alert.append(element('strong','',`${item.label} · ${fmtDate(item.date)}`),element('span','',status));
+      const display=duePresentation(item);
+      const alert=element('div',`due-item ${display.level}`);
+      alert.append(element('strong','',display.label),element('span','',display.status));
       box.append(alert);
     });
   }
@@ -825,7 +874,7 @@ function verifyLegacyModule() {
   const imported = window.EVLegacy;
   const ok = Boolean(imported && imported.version === '0.6.0');
   $('legacy-module-check').textContent = ok
-    ? '✅ Импорт модул v0.6.0 зареден · разпознава „Домашно (Home)“.'
+    ? '✅ Импорт модул v0.6.0 зареден (непроменен във v0.7) · разпознава „Домашно (Home)“.'
     : '⚠ Импорт модулът не е v0.6.0. Не потвърждавай импорт. Презареди страницата онлайн.';
   $('legacy-preview').disabled = !ok;
 }

@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=060">
+  <link rel="stylesheet" href="./styles.css?v=070">
   <title>EV Log 2.0</title>
-  <script src="./legacy-import.js?v=060" defer></script>
-  <script src="./app.js?v=060" defer></script>
+  <script src="./legacy-import.js?v=070" defer></script>
+  <script src="./app.js?v=070" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v0.6.0</span>
+      <span class="version">v0.7.0</span>
     </header>
 
     <main id="main">
@@ -41,6 +41,7 @@
           <button id="quick-add" class="primary" type="button">＋ Зареждане</button>
           <button id="quick-expense" class="secondary" type="button">＋ Разход</button>
         </div>
+        <div class="panel home-reminders"><div class="section-heading tight"><h2>📅 Срокове и обслужване</h2><button class="text-button" type="button" data-go="garage">Garage →</button></div><div id="home-due-list" class="home-due-list" aria-live="polite"><p class="small-note">Зареждане на сроковете…</p></div><p class="tiny">Проверява само ръчно въведените дати и километраж. Няма автоматични известия.</p></div>
         <div class="panel analytics-shortcut"><div class="section-heading tight"><h2>📊 Статистика и EV/ICE</h2><button class="text-button" type="button" data-go="stats">Отвори →</button></div><p>Разходи по месеци, заредени kWh и сравнение с бензин/дизел.</p></div>
         <div class="section-heading"><h2>Последни зареждания</h2><button class="text-button" type="button" data-go="history">Виж всички →</button></div>
         <div id="recent-list" class="record-list"><p class="empty">Все още няма записи.</p></div>
@@ -149,6 +150,10 @@
               <label class="field">Road tax / VED до<input id="due-tax" type="date"></label>
               <label class="field">Следващ service<input id="due-service" type="date"></label>
             </div>
+            <label class="field">Следващ service при километраж (mi, по желание)
+              <input id="service-next-odo" type="number" min="0" max="9999999" step="1" inputmode="numeric" placeholder="Напр. 55000">
+            </label>
+            <p class="tiny">Можеш да използваш дата, километраж или и двете. Пробегът се сравнява с ръчно записания текущ километраж в Garage — не се изчислява от GPS.</p>
           </div>
           <div class="panel form-panel">
             <h2>🔧 Консумативи и обслужване</h2>
@@ -258,7 +263,7 @@
         </div>
         <div class="panel">
           <h2>📥 Възстановяване</h2>
-          <p>Избери архив от EV Log 2.0 v0.1–v0.6.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
+          <p>Избери архив от EV Log 2.0 v0.1–v0.7.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
           <label class="file-button" for="import-backup">Избери JSON файл</label>
           <input type="file" id="import-backup" accept=".json,application/json" class="visually-hidden">
           <p class="tiny" id="selected-file">Няма избран файл</p>
@@ -296,7 +301,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v0.6.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v0.7.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
