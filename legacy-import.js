@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.4 - import-only converters. No network, no writes, no Firebase. */
+/* EV Log 2.0 v0.6.0 - import-only converters. No network, no writes, no Firebase. */
 (function (root) {
   const LIMIT = 10000;
   const isDate = s => {
@@ -129,6 +129,6 @@
     data.costs.forEach((r,i)=>{try{items.push(normalizeCost({date:r.date,amount:r.amount,category:r.category,target:r.applies,note:r.note,id:r.id},'old-json',i+1));}catch(e){errors.push(`Разход ${i+1}: ${e.message}`);}});
     return {items,errors,kind:'стар JSON',filename:'EV Log backup'};
   }
-  root.EVLegacy = Object.freeze({parseCSV,parseOldJson});
+  root.EVLegacy = Object.freeze({version:'0.6.0',parseCSV,parseOldJson});
   if(typeof module==='object' && module.exports)module.exports=root.EVLegacy;
 })(typeof window==='object'?window:globalThis);

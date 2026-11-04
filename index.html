@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=060">
   <title>EV Log 2.0</title>
-  <script src="./legacy-import-v050.js" defer></script>
-  <script src="./app-v050.js" defer></script>
+  <script src="./legacy-import.js?v=060" defer></script>
+  <script src="./app.js?v=060" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v0.5.0</span>
+      <span class="version">v0.6.0</span>
     </header>
 
     <main id="main">
@@ -134,7 +134,10 @@
               <label class="field">Година<input id="vehicle-year" type="number" min="1950" max="2100" step="1" placeholder="Напр. 2021"></label>
               <label class="field">Регистрация<input id="vehicle-reg" maxlength="20" placeholder="Напр. AB12 CDE"></label>
             </div>
+            <label class="field">VIN (по желание)<input id="vehicle-vin" maxlength="25" autocapitalize="characters" placeholder="Номер от документите на автомобила"></label>
             <label class="field">Текущ километраж (мили)<input id="vehicle-odo" type="number" min="0" max="9999999" step="1" inputmode="numeric" placeholder="По желание"></label>
+            <button id="garage-use-last-odo" class="secondary" type="button">↳ Вземи последния записан километраж</button>
+            <p class="tiny" id="garage-odo-hint">Проверява записите за зареждане, без да променя нищо автоматично.</p>
             <label class="field">Бележки<textarea id="vehicle-notes" maxlength="500" rows="2" placeholder="По желание"></textarea></label>
           </div>
           <div class="panel form-panel">
@@ -147,8 +150,29 @@
               <label class="field">Следващ service<input id="due-service" type="date"></label>
             </div>
           </div>
+          <div class="panel form-panel">
+            <h2>🔧 Консумативи и обслужване</h2>
+            <p class="tiny">Можеш ръчно да пренесеш данните от Garage във второто EV Log Cloud. Не се изисква вход или облачна връзка.</p>
+            <div class="form-grid">
+              <label class="field">Гуми — дата на монтаж<input id="tyres-installed-date" type="date"></label>
+              <label class="field">Километраж при монтаж (mi)<input id="tyres-odo" type="number" min="0" max="9999999" step="1" inputmode="numeric" placeholder="По желание"></label>
+            </div>
+            <label class="field">Бележка за гумите<input id="tyres-note" maxlength="200" placeholder="Марка, сезон, размер…"></label>
+            <div class="form-grid">
+              <label class="field">12V акумулатор — дата на смяна<input id="battery-12v-date" type="date"></label>
+              <label class="field">Филтър купе — дата на смяна<input id="cabin-filter-date" type="date"></label>
+              <label class="field">Чистачки — дата на смяна<input id="wipers-date" type="date"></label>
+            </div>
+            <p class="tiny">Тези дати са за история и не създават автоматични крайни срокове.</p>
+          </div>
           <button id="save-garage" class="primary action-large" type="submit">Запази Garage</button>
         </form>
+        <div class="panel garage-events">
+          <h2>📋 Последни разходи за обслужване</h2>
+          <p class="tiny">Показва вече записаните EV разходи за сервиз, гуми и ремонт. Не създава дублирани записи.</p>
+          <div id="garage-maintenance-list" class="record-list"></div>
+          <button type="button" class="secondary garage-costs-button" data-go="costs">Виж всички разходи</button>
+        </div>
       </section>
 
       <section class="view" id="view-stats" aria-labelledby="stats-title" hidden>
@@ -234,7 +258,7 @@
         </div>
         <div class="panel">
           <h2>📥 Възстановяване</h2>
-          <p>Избери архив от EV Log 2.0 v0.1–v0.5.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
+          <p>Избери архив от EV Log 2.0 v0.1–v0.6.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
           <label class="file-button" for="import-backup">Избери JSON файл</label>
           <input type="file" id="import-backup" accept=".json,application/json" class="visually-hidden">
           <p class="tiny" id="selected-file">Няма избран файл</p>
@@ -272,7 +296,8 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v0.5.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v0.6.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
       </section>

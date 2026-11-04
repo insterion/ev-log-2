@@ -152,3 +152,11 @@ p{line-height:1.55}
 .audit-export-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}
 .audit-export-actions button{min-height:50px;white-space:normal;font-size:12px}
 @media(max-width:380px){.audit-export-actions{grid-template-columns:1fr}}
+
+/* v0.6 — Garage consumables and compact repository setup */
+#garage-use-last-odo{width:100%;text-align:center;white-space:normal}
+.garage-events .record-list{margin:15px 0}
+.garage-events .record{padding:12px 14px}
+.garage-events .record-title{font-size:14px}
+.garage-costs-button{width:100%;margin-top:8px}
+.panel code{font-size:12px;white-space:normal;overflow-wrap:anywhere}

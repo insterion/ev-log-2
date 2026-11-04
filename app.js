@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v0.4.1
+/* EV Log 2.0 v0.6.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -53,8 +53,11 @@ let installEvent = null;
 function defaultComparison() {
   return {distanceMiles:100,efficiencyMiKwh:3.5,iceMpgUk:45,fuelPriceLitre:1.50,priceMode:'history',manualPriceKwh:0.56};
 }
+function emptyGarageExtras() {
+  return {vin:'',tyresInstalledDate:'',tyresOdometerMiles:null,tyresNote:'',battery12vDate:'',cabinFilterDate:'',wipersDate:''};
+}
 function emptyGarage() {
-  return {make:'',model:'',year:null,registration:'',odometerMiles:null,notes:'',due:{mot:'',insurance:'',tax:'',service:''}};
+  return {make:'',model:'',year:null,registration:'',odometerMiles:null,notes:'',due:{mot:'',insurance:'',tax:'',service:''},extras:emptyGarageExtras()};
 }
 function notify(message,error=false) {
   const el = $('toast');
@@ -176,10 +179,23 @@ function validateGarage(raw) {
   for (const key of Object.keys(DUE_NAMES)) {
     if (typeof raw.due[key] !== 'string' || (raw.due[key] && !dateValid(raw.due[key]))) throw Error(`Невалидна дата за ${DUE_NAMES[key]}.`);
   }
-  return raw;
+  // v0.1–v0.5 Garage records do not have `extras`. Accept them unchanged,
+  // and add empty optional fields in memory/when next saved. No database migration.
+  if (raw.extras !== undefined && (raw.extras === null || typeof raw.extras !== 'object' || Array.isArray(raw.extras))) {
+    throw Error('Невалидни допълнителни Garage данни.');
+  }
+  const extras={...emptyGarageExtras(),...(raw.extras || {})};
+  textField(extras.vin,25,'VIN');textField(extras.tyresNote,200,'гуми');
+  if (!optionalOdo(extras.tyresOdometerMiles)) throw Error('Невалиден километраж при монтаж на гуми.');
+  for (const key of ['tyresInstalledDate','battery12vDate','cabinFilterDate','wipersDate']) {
+    if (typeof extras[key] !== 'string' || (extras[key] && !dateValid(extras[key]))) throw Error('Невалидна дата в консумативите.');
+  }
+  return {...raw,extras};
 }
 function garageIsEmpty(profile) {
-  return !profile.make && !profile.model && !profile.registration && profile.year === null && profile.odometerMiles === null && !profile.notes && !Object.values(profile.due).some(Boolean);
+  const e={...emptyGarageExtras(),...(profile.extras || {})};
+  return !profile.make && !profile.model && !profile.registration && profile.year === null && profile.odometerMiles === null && !profile.notes && !Object.values(profile.due).some(Boolean) &&
+    !e.vin && !e.tyresInstalledDate && e.tyresOdometerMiles === null && !e.tyresNote && !e.battery12vDate && !e.cabinFilterDate && !e.wipersDate;
 }
 function chargeFromForm() {
   const prior = chargeEditingId ? charges.find(x => x.id === chargeEditingId) : null;
@@ -208,10 +224,20 @@ function garageFromForm() {
   const odo = $('vehicle-odo').value.trim();
   const due = {};
   for (const key of Object.keys(DUE_NAMES)) due[key] = $(`due-${key}`).value;
+  const tyresOdo=$('tyres-odo').value.trim();
   return validateGarage({
     make:$('vehicle-make').value.trim(),model:$('vehicle-model').value.trim(),
     year:year === '' ? null : Number(year),registration:$('vehicle-reg').value.trim().toUpperCase(),
-    odometerMiles:odo === '' ? null : Number(odo),notes:$('vehicle-notes').value.trim(),due
+    odometerMiles:odo === '' ? null : Number(odo),notes:$('vehicle-notes').value.trim(),due,
+    extras:{
+      vin:$('vehicle-vin').value.trim().toUpperCase(),
+      tyresInstalledDate:$('tyres-installed-date').value,
+      tyresOdometerMiles:tyresOdo === '' ? null : Number(tyresOdo),
+      tyresNote:$('tyres-note').value.trim(),
+      battery12vDate:$('battery-12v-date').value,
+      cabinFilterDate:$('cabin-filter-date').value,
+      wipersDate:$('wipers-date').value
+    }
   });
 }
 function resetChargeForm() {
@@ -282,6 +308,14 @@ function loadGarageForm() {
   $('vehicle-odo').value=garage.odometerMiles ?? '';
   $('vehicle-notes').value=garage.notes;
   Object.keys(DUE_NAMES).forEach(key => {$(`due-${key}`).value=garage.due[key] || '';});
+  const extras={...emptyGarageExtras(),...(garage.extras || {})};
+  $('vehicle-vin').value=extras.vin;
+  $('tyres-installed-date').value=extras.tyresInstalledDate;
+  $('tyres-odo').value=extras.tyresOdometerMiles ?? '';
+  $('tyres-note').value=extras.tyresNote;
+  $('battery-12v-date').value=extras.battery12vDate;
+  $('cabin-filter-date').value=extras.cabinFilterDate;
+  $('wipers-date').value=extras.wipersDate;
 }
 function actionButtons(card,type,id) {
   const row=element('div','record-actions');
@@ -351,7 +385,10 @@ function renderMonthFilter(select,items) {
 function renderHistory() {
   renderMonthFilter($('history-filter'),charges);
   const selected=$('history-filter').value;
-  const items=selected==='all'?charges:charges.filter(x=>x.date.startsWith(selected));
+  const query=normalizedText($('history-search').value);
+  const terms=query.split(' ').filter(Boolean);
+  const items=charges.filter(x=>(selected==='all'||x.date.startsWith(selected)) &&
+    terms.every(term=>normalizedText([x.date,fmtDate(x.date),x.kwh,x.pricePerKwh,chargeTotal(x),x.type,TYPE_NAMES[x.type]||'',x.station,x.notes,x.odometerMiles??''].join(' ')).includes(term)));
   $('history-summary').textContent=`${items.length} записа`;
   $('history-sum').textContent=money(items.reduce((sum,x)=>sum+chargeTotal(x),0));
   renderList($('history-list'),items,chargeCard,true);
@@ -360,7 +397,9 @@ function renderCosts() {
   renderMonthFilter($('costs-filter'),expenses);
   const selected=$('costs-filter').value;
   const category=$('cost-target-filter').value;
-  const items=expenses.filter(x=>(selected==='all'||x.date.startsWith(selected)) && (category==='all'||(x.target||'ev')===category));
+  const terms=normalizedText($('costs-search').value).split(' ').filter(Boolean);
+  const items=expenses.filter(x=>(selected==='all'||x.date.startsWith(selected)) && (category==='all'||(x.target||'ev')===category) &&
+    terms.every(term=>normalizedText([x.date,fmtDate(x.date),x.amount,x.category,COST_NAMES[x.category]||'',x.target,x.title,x.notes,x.odometerMiles??''].join(' ')).includes(term)));
   $('costs-summary').textContent=`${items.length} разхода`;
   $('costs-sum').textContent=money(items.reduce((sum,x)=>sum+x.amount,0));
   renderList($('costs-list'),items,expenseCard,true,'Няма други разходи за периода.');
@@ -375,14 +414,22 @@ function renderGarage() {
   const deadlines=Object.entries(DUE_NAMES).filter(([key])=>garage.due[key]).map(([key,label])=>({key,label,date:garage.due[key],days:daysUntil(garage.due[key])})).sort((a,b)=>a.days-b.days);
   if (!deadlines.length) {
     box.append(element('p','small-note','Няма въведени срокове. Те не се проверяват от DVLA или застраховател — въведи ги по документи.'));
-    return;
+  } else {
+    deadlines.forEach(item => {
+      const status=item.days<0?'Изтекъл срок':item.days===0?'Днес':item.days<=30?`След ${item.days} дни`:'Предстоящ';
+      const alert=element('div',`due-item ${item.days<0?'expired':item.days<=30?'near':'normal'}`);
+      alert.append(element('strong','',`${item.label} · ${fmtDate(item.date)}`),element('span','',status));
+      box.append(alert);
+    });
   }
-  deadlines.forEach(item => {
-    const status=item.days<0?'Изтекъл срок':item.days===0?'Днес':item.days<=30?`След ${item.days} дни`:'Предстоящ';
-    const alert=element('div',`due-item ${item.days<0?'expired':item.days<=30?'near':'normal'}`);
-    alert.append(element('strong','',`${item.label} · ${fmtDate(item.date)}`),element('span','',status));
-    box.append(alert);
-  });
+  // Read only: these entries are already present in Expenses, not duplicated.
+  const history=$('garage-maintenance-list'); history.replaceChildren();
+  const items=expenses.filter(x=>['service','tyres','repair'].includes(x.category) && ['ev','both'].includes(x.target || 'ev')).slice(0,5);
+  if (!items.length) {
+    history.append(element('p','small-note','Още няма EV разходи за сервиз, гуми или ремонт. Добави ги през „Разходи“.'));
+  } else {
+    items.forEach(item=>history.append(expenseCard(item,false)));
+  }
 }
 /* Analytics never modifies charges, expenses or garage. All displays are derived from local records. */
 function validateComparison(value) {
@@ -539,6 +586,7 @@ function renderStats() {
 function renderAll() {
   renderHome();renderHistory();renderCosts();renderGarage();renderStats();
   $('backup-count').textContent=`В момента: ${charges.length} зареждания, ${expenses.length} други разхода${garageIsEmpty(garage)?', Garage е празен.':', Garage е попълнен.'}`;
+  renderAuditOverview();
 }
 function chargeSignature(x) {return [x.date,x.odometerMiles??'',x.type,x.kwh,x.pricePerKwh,x.station.trim().toLowerCase(),x.notes.trim().toLowerCase()].join('\u001f');}
 function expenseSignature(x) {return [x.date,x.amount,x.category,x.target||'ev',x.title.trim().toLowerCase(),x.odometerMiles??'',x.notes.trim().toLowerCase()].join('\u001f');}
@@ -688,6 +736,7 @@ function renderLegacyPreview() {
   countLegacy();
 }
 async function prepareLegacyPreview() {
+  if (!window.EVLegacy || window.EVLegacy.version !== '0.4.2') throw Error('Импорт модулът е стар или не се е заредил. Обнови страницата онлайн. Не прави импорт.');
   const filenames=[...$('legacy-files').files];
   const pasted=$('legacy-json').value.trim();
   if(!filenames.length && !pasted)throw Error('Избери CSV / JSON файл или постави JSON текста от първото приложение.');
@@ -772,6 +821,14 @@ async function commitLegacy() {
   $('legacy-status').textContent=`✅ Добавени ${c} зареждания и ${e} други разхода. Създай нов пълен JSON backup от EV Log 2.0.`;
   notify(`Добавени ${c} зареждания и ${e} разхода. Направи нов backup.`);
 }
+function verifyLegacyModule() {
+  const imported = window.EVLegacy;
+  const ok = Boolean(imported && imported.version === '0.6.0');
+  $('legacy-module-check').textContent = ok
+    ? '✅ Импорт модул v0.6.0 зареден · разпознава „Домашно (Home)“.'
+    : '⚠ Импорт модулът не е v0.6.0. Не потвърждавай импорт. Презареди страницата онлайн.';
+  $('legacy-preview').disabled = !ok;
+}
 function bindLegacyEvents() {
   $('legacy-files').addEventListener('change',()=>{
     const names=[...$('legacy-files').files].map(x=>x.name);
@@ -797,6 +854,130 @@ function bindLegacyEvents() {
   });
 }
 /* --------------------------- end legacy merger --------------------------- */
+
+/* ---------------------- v0.5: read-only history audit --------------------- */
+let auditSnapshot = '';
+function auditCounts() {
+  const allCharges=charges.reduce((s,x)=>s+chargeTotal(x),0);
+  const allCosts=expenses.reduce((s,x)=>s+x.amount,0);
+  const sources=new Map();
+  for(const x of [...charges,...expenses]) {
+    const key=x.importSource || 'manual';
+    sources.set(key,(sources.get(key)||0)+1);
+  }
+  return {allCharges,allCosts,sources};
+}
+function auditSourceName(key) {
+  return ({'cloud-csv':'Второ приложение (CSV)','old-json':'Първо приложение (JSON)','old-csv':'Първо приложение (CSV)','manual':'Ръчно / архив EV Log 2.0'})[key]||key;
+}
+function renderAuditOverview() {
+  const {allCharges,allCosts,sources}=auditCounts();
+  const root=$('audit-overview');root.replaceChildren();
+  const lines=[
+    `${charges.length} зареждания · общо ${money(allCharges)}`,
+    `${expenses.length} други разхода · общо ${money(allCosts)}`,
+    `Всички разходи: ${money(allCharges+allCosts)}`
+  ];
+  for(const line of lines)root.append(element('div','audit-summary-row',line));
+  const sourceBox=element('div','audit-sources');
+  sourceBox.append(element('strong','', 'Произход на записите (зареждания + разходи):'));
+  for(const [source,n] of [...sources].sort((a,b)=>b[1]-a[1]))sourceBox.append(element('div','',`${auditSourceName(source)}: ${n}`));
+  root.append(sourceBox);
+  if(auditSnapshot && auditSnapshot!==dbSnapshot()) {
+    auditSnapshot='';$('audit-groups').replaceChildren();
+    $('audit-status').textContent='Записите са променени. Натисни „Провери“ за нова проверка.';
+  }
+}
+function findAuditGroups() {
+  // Screening only: two legitimate sessions may share date, kWh and tariff.
+  // Never delete or auto-select any result.
+  const groups=new Map();
+  function add(kind,record,key) {
+    const code=kind+'|'+key;
+    if(!groups.has(code))groups.set(code,{kind,items:[]});
+    groups.get(code).items.push(record);
+  }
+  for(const r of charges)add('charge',r,[r.date,r.kwh.toFixed(3),r.pricePerKwh.toFixed(4)].join('|'));
+  for(const r of expenses)add('cost',r,[r.date,r.amount.toFixed(2),r.category].join('|'));
+  return [...groups.values()].filter(g=>g.items.length>1)
+    .sort((a,b)=>b.items[0].date.localeCompare(a.items[0].date)||b.items.length-a.items.length);
+}
+function auditLabel(group) {
+  const r=group.items[0];
+  return group.kind==='charge'
+    ? `${fmtDate(r.date)} · ${r.kwh} kWh × £${r.pricePerKwh}/kWh · ${money(chargeTotal(r))}`
+    : `${fmtDate(r.date)} · ${money(r.amount)} · ${COST_NAMES[r.category]||r.category}`;
+}
+function auditRecordLabel(kind,r) {
+  const detail=kind==='charge'
+    ? `${TYPE_NAMES[r.type]||r.type} · ${r.station||'без станция'} · ${r.odometerMiles??'–'} mi`
+    : `${r.title} · ${TARGET_NAMES[r.target||'ev']||r.target}`;
+  return `${detail} · ${auditSourceName(r.importSource||'manual')}${r.notes?' · '+r.notes:''}`;
+}
+function runAudit() {
+  const groups=findAuditGroups();
+  const root=$('audit-groups');root.replaceChildren();
+  const totalRecords=groups.reduce((sum,g)=>sum+g.items.length,0);
+  $('audit-status').textContent=groups.length
+    ? `⚠ ${groups.length} групи с еднаква дата и kWh/цена или сума/категория (${totalRecords} записа общо). Това са ВЪЗМОЖНИ, не доказани дубликати.`
+    : '✅ Няма намерени записи с еднаква дата и ключови стойности. Това не изключва всички възможни повторения.';
+  if(!groups.length){auditSnapshot=dbSnapshot();return;}
+  const limited=groups.slice(0,150);
+  for (const group of limited) {
+    const details=document.createElement('details');details.className='audit-group';
+    const summary=document.createElement('summary');
+    summary.textContent=`${group.items.length} записа · ${auditLabel(group)}`;
+    details.append(summary);
+    for(const item of group.items){
+      const node=element('div','audit-record',auditRecordLabel(group.kind,item));
+      details.append(node);
+    }
+    const jump=element('button','secondary audit-jump','Виж записите за тази дата');jump.type='button';
+    jump.addEventListener('click',()=>{
+      if(group.kind==='charge'){
+        $('history-filter').value=group.items[0].date.slice(0,7);
+        $('history-search').value=group.items[0].date;
+        renderHistory();navigate('history');
+      } else {
+        $('costs-filter').value=group.items[0].date.slice(0,7);
+        $('cost-target-filter').value='all';
+        $('costs-search').value=group.items[0].date;
+        renderCosts();navigate('costs');
+      }
+    });
+    details.append(jump);root.append(details);
+  }
+  if(groups.length>limited.length)root.append(element('p','small-note',`Показани са първите ${limited.length} групи. Използвай CSV експорта за пълна проверка.`));
+  auditSnapshot=dbSnapshot();
+}
+function csvSafe(value) {
+  let s=String(value??'');
+  // Prevent CSV/Excel formula execution when user-entered text is opened in a spreadsheet.
+  if(/^\s*[=+@-]/.test(s))s="'"+s;
+  return '"'+s.replace(/"/g,'""')+'"';
+}
+function downloadCsv(rows,filename) {
+  const data='\uFEFF'+rows.map(row=>row.map(csvSafe).join(',')).join('\r\n')+'\r\n';
+  const blob=new Blob([data],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;
+  document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+function exportAuditCsv(kind) {
+  if(kind==='charge'){
+    const rows=[['date','kwh','price_per_kwh','total_gbp','type','odometer_miles','station','note','import_source']];
+    for(const r of charges)rows.push([r.date,r.kwh,r.pricePerKwh,chargeTotal(r),r.type,r.odometerMiles??'',r.station,r.notes,r.importSource||'manual']);
+    downloadCsv(rows,`EV-Log-2-charges-${today()}.csv`);
+  } else {
+    const rows=[['date','amount_gbp','category','target','title','odometer_miles','note','import_source']];
+    for(const r of expenses)rows.push([r.date,r.amount,r.category,r.target||'ev',r.title,r.odometerMiles??'',r.notes,r.importSource||'manual']);
+    downloadCsv(rows,`EV-Log-2-costs-${today()}.csv`);
+  }
+  notify('CSV файлът е подготвен. Провери Downloads. За възстановяване използвай JSON backup.');
+}
+/* ------------------------------ end audit -------------------------------- */
+
 
 async function onRecordClick(event,kind) {
   const button=event.target.closest('button[data-action]');
@@ -842,6 +1023,7 @@ function attachEvents() {
   });
   $('cancel-edit').addEventListener('click',resetChargeForm);
   $('history-filter').addEventListener('change',renderHistory);
+  $('history-search').addEventListener('input',renderHistory);
   $('history-list').addEventListener('click',event=>onRecordClick(event,'charge'));
   $('new-expense').addEventListener('click',()=>openExpenseForm());
   $('cancel-expense').addEventListener('click',()=>{$('expense-form').hidden=true;resetExpenseForm();});
@@ -851,6 +1033,7 @@ function attachEvents() {
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('costs-filter').addEventListener('change',renderCosts);
+  $('costs-search').addEventListener('input',renderCosts);
   $('cost-target-filter').addEventListener('change',renderCosts);
   $('stats-period').addEventListener('change',renderStats);
   $('compare-price-mode').addEventListener('change',()=>{updateManualPriceVisibility();try{renderComparison(comparisonFromForm());}catch(_){}});
@@ -863,12 +1046,23 @@ function attachEvents() {
     } catch(error) {notify(error.message,true);}finally{b.disabled=false;}
   });
   $('costs-list').addEventListener('click',event=>onRecordClick(event,'cost'));
+  $('garage-use-last-odo').addEventListener('click',()=>{
+    const last=charges.find(x=>Number.isInteger(x.odometerMiles) && x.odometerMiles>=0);
+    if(!last) { notify('Няма зареждане със записан километраж.',true);return; }
+    const field=$('vehicle-odo');
+    if (field.value.trim() && field.value.trim()!==String(last.odometerMiles) && !confirm(`Да заменя ${field.value} mi с ${last.odometerMiles} mi от ${fmtDate(last.date)}?`)) return;
+    field.value=String(last.odometerMiles);
+    $('garage-odo-hint').textContent=`Последно зареждане с километраж: ${fmtDate(last.date)} · ${last.odometerMiles.toLocaleString('en-GB')} mi. Натисни „Запази Garage“, за да го запишеш.`;
+  });
   $('garage-form').addEventListener('submit',async event=>{
     event.preventDefault();const b=$('save-garage');
     try {const profile=garageFromForm();b.disabled=true;await saveGarage(profile);await refresh();loadGarageForm();notify('Garage е запазен.');}
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
   $('export-backup').addEventListener('click',()=>downloadBackup().catch(e=>notify(e.message,true)));
+  $('audit-run').addEventListener('click',runAudit);
+  $('export-charges-csv').addEventListener('click',()=>exportAuditCsv('charge'));
+  $('export-costs-csv').addEventListener('click',()=>exportAuditCsv('cost'));
   $('import-backup').addEventListener('change',async event=>{
     const file=event.target.files?.[0];if(!file)return;
     $('selected-file').textContent=file.name;
@@ -891,6 +1085,7 @@ async function start() {
     db=await openDb();
     db.onversionchange=()=>{db.close();notify('Базата е обновена в друг прозорец. Презареди страницата.',true);};
     await refresh();resetChargeForm();resetExpenseForm();loadGarageForm();loadComparisonForm();attachEvents();
+    verifyLegacyModule();
     updatePwaStatus();
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('controllerchange',updatePwaStatus);
