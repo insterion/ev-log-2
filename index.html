@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=170">
+  <link rel="stylesheet" href="./styles.css?v=180">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=170" defer></script>
+  <script src="./app.js?v=180" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v1.7.0</span>
+      <span class="version">v1.8.0</span>
     </header>
 
     <main id="main">
@@ -88,6 +88,11 @@
           <div class="tariff-suggestion" aria-live="polite">
             <p id="station-tariff-hint" class="small-note">Избери станция от историята или въведи нова.</p>
             <button id="use-station-tariff" class="secondary" type="button" hidden>↺ Използвай последната цена</button>
+          </div>
+          <div class="personal-tariff-box" aria-labelledby="personal-tariffs-charge-title">
+            <div class="section-heading tight"><h2 id="personal-tariffs-charge-title">⭐ Моите тарифи</h2><button class="text-button" type="button" data-go="data">Управление →</button></div>
+            <p class="tiny">Натисни запазена тарифа, за да попълниш <strong>тип, станция и цена</strong>. kWh, километраж и бележки не се променят. Винаги провери актуалната цена.</p>
+            <div id="personal-tariffs-shortcuts" class="personal-tariff-shortcuts" aria-label="Запазени тарифи"></div>
           </div>
           <div class="total-preview"><span>Изчислена сума</span><strong id="preview-total">—</strong></div>
           <div id="charge-entry-warnings" class="charge-entry-warnings" role="status" aria-live="polite" hidden></div>
@@ -320,9 +325,26 @@
 
       <section class="view" id="view-data" aria-labelledby="data-title" hidden>
         <p class="eyebrow">СИГУРНОСТ НА ДАННИТЕ</p><h1 id="data-title">Данни и архив</h1>
+        <div class="panel personal-tariffs-manager" id="personal-tariffs-manager">
+          <h2>⭐ Моите тарифи</h2>
+          <p class="small-note">Запази до 30 често използвани тарифи — например „Домашно 24p“, „Electroverse AC“ или „Rapid“. Те са само предложения: реалната цена се проверява преди всяко зареждане.</p>
+          <form id="personal-tariff-form" novalidate>
+            <label class="field">Име на тарифата<input type="text" id="personal-tariff-name" maxlength="60" required placeholder="Напр. Домашно 24p"></label>
+            <div class="form-grid">
+              <label class="field">Вид зареждане<select id="personal-tariff-type"><option value="public">Публично AC</option><option value="rapid">Бързо DC</option><option value="home">Домашно</option><option value="work">Служебно / друго</option></select></label>
+              <label class="field">Цена (£/kWh)<input type="number" id="personal-tariff-price" min="0" max="10" step="any" inputmode="decimal" placeholder="Напр. 0.24" required></label>
+            </div>
+            <label class="field">Станция / оператор (по желание)<input type="text" id="personal-tariff-station" maxlength="120" placeholder="Напр. Electroverse"></label>
+            <button type="submit" id="personal-tariff-save" class="primary action-large">Запази тарифата</button>
+            <button type="button" id="personal-tariff-cancel" class="secondary action-large" hidden>Откажи редакцията</button>
+          </form>
+          <p class="tiny" id="personal-tariff-count">0 запазени тарифи</p>
+          <div id="personal-tariffs-list" class="personal-tariffs-list" aria-live="polite"></div>
+          <p class="tiny">Тарифите се пазят само в тази браузърна база и се включват в пълния JSON backup. Изтриването на тарифа <strong>не изтрива</strong> стари зареждания.</p>
+        </div>
         <div class="panel">
           <h2>💾 Резервно копие</h2>
-          <p>Изтегли <strong>един JSON файл</strong> с всички зареждания, разходи, Garage, любими станции и настройки за сравнение. Архивирай извън телефона (напр. във Files или Google Drive ръчно).</p>
+          <p>Изтегли <strong>един JSON файл</strong> с всички зареждания, разходи, Garage, любими станции, лични тарифи и настройки за сравнение. Архивирай извън телефона (напр. във Files или Google Drive ръчно).</p>
           <button id="export-backup" class="primary backup-action" type="button">⬇ Изтегли пълен JSON backup</button>
           <button id="share-backup" class="secondary backup-action" type="button" hidden>↗ Сподели архива чрез Android</button>
           <p class="tiny" id="backup-count">—</p>
@@ -402,7 +424,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v1.7.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v1.8.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">От тази версия JavaScript файловете са с постоянни имена (<code>app.js</code> и <code>legacy-import.js</code>). Старите файлове с версии може да се премахнат от GitHub <strong>след</strong> успешен тест и архив.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>

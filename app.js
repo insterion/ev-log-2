@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.7.0
+/* EV Log 2.0 v1.8.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -12,6 +12,7 @@ const EXPENSE_PREFIX = 'expense:';
 const GARAGE_KEY = 'garage:profile';
 const COMPARISON_KEY = 'comparison:settings';
 const FAVORITES_KEY = 'charging:favourites';
+const PERSONAL_TARIFFS_KEY = 'charging:personal-tariffs';
 const BACKUP_FORMAT = 'ev-log-2';
 const PRICE_HINTS = { public:0.56, rapid:0.79, home:0.24, work:0 };
 const TYPE_NAMES = { public:'Публично AC', rapid:'Бързо DC', home:'Домашно', work:'Служебно / друго' };
@@ -47,6 +48,8 @@ let garage = emptyGarage();
 let comparison = defaultComparison();
 let comparisonStored = false;
 let favoriteStations = [];
+let personalTariffs = [];
+let editingPersonalTariffId = null;
 let chargeEditingId = null;
 let suggestedTariff = null;
 let expenseEditingId = null;
@@ -153,6 +156,87 @@ async function toggleFavorite(item) {
   await refresh();
   notify(next.includes(key)?'Станцията е добавена към Любими.':'Станцията е премахната от Любими.');
 }
+/* v1.8: personal tariffs live in the existing metadata object store. Never alter a charge. */
+function validatePersonalTariffs(value) {
+  if(!Array.isArray(value) || value.length>30)throw Error('Невалиден списък с тарифи (максимум 30).');
+  const ids=new Set(),names=new Set();
+  return value.map(entry=>{
+    if(!entry || typeof entry!=='object' || !validId(entry.id))throw Error('Невалиден идентификатор на тарифа.');
+    if(typeof entry.name!=='string' || !entry.name.trim() || entry.name.length>60)throw Error('Невалидно име на тарифа.');
+    if(!Object.hasOwn(TYPE_NAMES,entry.type))throw Error('Невалиден тип на тарифата.');
+    if(!numeric(entry.pricePerKwh) || entry.pricePerKwh<0 || entry.pricePerKwh>10)throw Error('Цената трябва да е между £0 и £10/kWh.');
+    if(typeof entry.station!=='string' || entry.station.length>120)throw Error('Невалидно име на станция.');
+    const name=normalizedText(entry.name);
+    if(ids.has(entry.id) || names.has(name))throw Error('Повтаряща се тарифа. Използвай различно име.');
+    ids.add(entry.id);names.add(name);
+    return {id:entry.id,name:entry.name.trim(),type:entry.type,station:entry.station.trim(),pricePerKwh:entry.pricePerKwh};
+  });
+}
+async function persistPersonalTariffs(next) {
+  const clean=validatePersonalTariffs(next);
+  await transaction([STORE_META],tx=>tx.objectStore(STORE_META).put({key:PERSONAL_TARIFFS_KEY,value:clean}));
+  personalTariffs=clean;
+  renderPersonalTariffs();
+}
+function personalTariffFromForm() {
+  if($('personal-tariff-price').value.trim()==='')throw Error('Въведи цена за тарифата.');
+  return {id:editingPersonalTariffId||newId(),name:$('personal-tariff-name').value.trim(),type:$('personal-tariff-type').value,
+    pricePerKwh:Number($('personal-tariff-price').value),station:$('personal-tariff-station').value.trim()};
+}
+function clearPersonalTariffForm() {
+  editingPersonalTariffId=null;
+  $('personal-tariff-form').reset();
+  $('personal-tariff-save').textContent='Запази тарифата';
+  $('personal-tariff-cancel').hidden=true;
+}
+function applyPersonalTariff(entry) {
+  // Do not silently discard an edit; apply presets to a new session only.
+  if(chargeEditingId) {notify('Първо приключи или откажи редакцията на зареждането.',true);return;}
+  $('type').value=entry.type;
+  $('station').value=entry.station;
+  $('price').value=String(entry.pricePerKwh);
+  // Never fill/overwrite the session quantity, odometer or notes.
+  renderChargeHelpers();updatePreview();
+  notify(`Приложена е тарифа „${entry.name}“. Провери актуалната цена преди запис.`);
+}
+function renderPersonalTariffs() {
+  const shortcuts=$('personal-tariffs-shortcuts'),list=$('personal-tariffs-list');
+  shortcuts.replaceChildren();list.replaceChildren();
+  $('personal-tariff-count').textContent=`${personalTariffs.length} от 30 запазени тарифи`;
+  if(!personalTariffs.length) {
+    shortcuts.append(element('p','tiny','Все още няма запазени тарифи. Добави първата в „Данни“.'));
+    list.append(element('p','small-note','Нямаш запазени тарифи. Можеш да добавиш една чрез формата.'));
+    return;
+  }
+  for(const entry of personalTariffs){
+    const shortcut=element('button','personal-tariff-shortcut');shortcut.type='button';
+    shortcut.append(element('strong','',entry.name),element('span','',`${TYPE_NAMES[entry.type]} · £${entry.pricePerKwh.toFixed(3)}/kWh`));
+    shortcut.addEventListener('click',()=>applyPersonalTariff(entry));shortcuts.append(shortcut);
+    const row=element('div','personal-tariff-row');
+    const info=element('div','tariff-info');
+    info.append(element('strong','',entry.name),element('small','',`${TYPE_NAMES[entry.type]} · ${entry.station||'Без посочена станция'} · £${entry.pricePerKwh.toFixed(3)}/kWh`));
+    const actions=element('div','tariff-actions');
+    const edit=element('button','secondary','Редактирай');edit.type='button';
+    edit.addEventListener('click',()=>{
+      editingPersonalTariffId=entry.id;
+      $('personal-tariff-name').value=entry.name;$('personal-tariff-type').value=entry.type;
+      $('personal-tariff-station').value=entry.station;$('personal-tariff-price').value=String(entry.pricePerKwh);
+      $('personal-tariff-save').textContent='Запази промените';$('personal-tariff-cancel').hidden=false;
+      $('personal-tariff-form').scrollIntoView({behavior:'smooth',block:'start'});
+    });
+    const del=element('button','secondary danger','Изтрий');del.type='button';
+    del.addEventListener('click',async()=>{
+      if(!confirm(`Да изтрия само запазената тарифа „${entry.name}“?
+
+Историческите зареждания няма да бъдат променени.`))return;
+      try {await persistPersonalTariffs(personalTariffs.filter(x=>x.id!==entry.id));
+        if(editingPersonalTariffId===entry.id)clearPersonalTariffForm();
+        notify('Тарифата е изтрита. Зарежданията остават непокътнати.');}
+      catch(e){notify(e.message,true);}
+    });
+    actions.append(edit,del);row.append(info,actions);list.append(row);
+  }
+}
 async function saveGarage(profile) {
   await transaction([STORE_META],tx => tx.objectStore(STORE_META).put({key:GARAGE_KEY,value:profile}));
 }
@@ -166,8 +250,11 @@ async function refresh() {
   comparison = savedComparison ? validateComparison(savedComparison.value) : defaultComparison();
   const storedFavorites=data.meta.find(item=>item.key===FAVORITES_KEY);
   favoriteStations=storedFavorites ? validateFavorites(storedFavorites.value) : [];
+  const storedPersonalTariffs=data.meta.find(item=>item.key===PERSONAL_TARIFFS_KEY);
+  personalTariffs=storedPersonalTariffs ? validatePersonalTariffs(storedPersonalTariffs.value) : [];
   renderAll();
   renderChargeHelpers();
+  renderPersonalTariffs();
 }
 function navigate(view) {
   document.querySelectorAll('.view').forEach(section => {
@@ -1094,7 +1181,7 @@ function renderStats() {
 
 function renderAll() {
   renderHome();renderHistory();renderCosts();renderGarage();renderStats();
-  $('backup-count').textContent=`В момента: ${charges.length} зареждания, ${expenses.length} други разхода, ${favoriteStations.length} любими станции${garageIsEmpty(garage)?', Garage е празен.':', Garage е попълнен.'}`;
+  $('backup-count').textContent=`В момента: ${charges.length} зареждания, ${expenses.length} други разхода, ${favoriteStations.length} любими станции, ${personalTariffs.length} лични тарифи${garageIsEmpty(garage)?', Garage е празен.':', Garage е попълнен.'}`;
   renderAuditOverview();
 }
 function chargeSignature(x) {return [x.date,x.odometerMiles??'',x.type,x.kwh,x.pricePerKwh,x.station.trim().toLowerCase(),x.notes.trim().toLowerCase()].join('\u001f');}
@@ -1115,7 +1202,7 @@ function validateBackup(data) {
   if (data.charges.length>100000) throw Error('Прекалено много зареждания в архива.');
   const chargeIds=new Set();
   data.charges.forEach(x=>{validateCharge(x);if(chargeIds.has(x.id)) throw Error('Повтарящи се ID на зареждания в архива.');chargeIds.add(x.id);});
-  let importedCosts=[],importedGarage=null,importedComparison=null,importedFavorites=null;
+  let importedCosts=[],importedGarage=null,importedComparison=null,importedFavorites=null,importedPersonalTariffs=null;
   if (data.version===2) {
     if (!Array.isArray(data.costs)) throw Error('Липсват разходите в архива v0.2.');
     if (data.costs.length>100000) throw Error('Прекалено много разходи в архива.');
@@ -1125,8 +1212,9 @@ function validateBackup(data) {
     if (data.garage !== null && data.garage !== undefined) importedGarage=validateGarage(data.garage);
     if (data.comparison !== null && data.comparison !== undefined) importedComparison=validateComparison(data.comparison);
     if (data.favoriteStations !== undefined && data.favoriteStations !== null) importedFavorites=validateFavorites(data.favoriteStations);
+    if (data.personalTariffs !== undefined && data.personalTariffs !== null) importedPersonalTariffs=validatePersonalTariffs(data.personalTariffs);
   }
-  return {charges:data.charges,costs:importedCosts,garage:importedGarage,comparison:importedComparison,favoriteStations:importedFavorites};
+  return {charges:data.charges,costs:importedCosts,garage:importedGarage,comparison:importedComparison,favoriteStations:importedFavorites,personalTariffs:importedPersonalTariffs};
 }
 /* v1.3: SHA-256 detects accidental changes to exported archives.
    The existing ev-log-2 version:2 format is preserved; older readers ignore
@@ -1154,6 +1242,9 @@ async function favoritesHash(value) {
   const bytes=await crypto.subtle.digest('SHA-256',encoded);
   return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
 }
+async function personalTariffsHash(value) {
+  return favoritesHash(value); // same canonical SHA-256 procedure as favourites.
+}
 async function verifyArchiveHash(payload) {
   if (!Object.hasOwn(payload,'integrity')) return {verified:false,description:'Стар архив без SHA-256 — формата и записите са проверени, но целостта не може да се потвърди криптографски.'};
   const tag=payload.integrity;
@@ -1166,6 +1257,10 @@ async function verifyArchiveHash(payload) {
     if(typeof tag.favoriteStationsHex!=='string' || !/^[0-9a-f]{64}$/.test(tag.favoriteStationsHex)) throw Error('Липсва SHA-256 проверката за любимите станции.');
     if ((await favoritesHash(payload.favoriteStations))!==tag.favoriteStationsHex) throw Error('SHA-256 на любимите станции не съвпада. Не импортирай този файл.');
   }
+  if (Object.hasOwn(payload,'personalTariffs')) {
+    if(typeof tag.personalTariffsHex!=='string' || !/^[0-9a-f]{64}$/.test(tag.personalTariffsHex)) throw Error('Липсва SHA-256 проверката за личните тарифи.');
+    if ((await personalTariffsHash(payload.personalTariffs))!==tag.personalTariffsHex) throw Error('SHA-256 на личните тарифи не съвпада. Нищо не е импортирано.');
+  }
   return {verified:true,description:'✅ SHA-256 съвпада: данните са съгласувани с контролната сума в архива (не доказва произхода му).'};
 }
 function backupFilename() {
@@ -1175,8 +1270,8 @@ function backupFilename() {
 }
 async function makeBackupFile() {
   await refresh();
-  const payload={format:BACKUP_FORMAT,version:2,exportedAt:new Date().toISOString(),charges:charges.map(x=>({...x})),costs:expenses.map(x=>({...x})),garage:JSON.parse(JSON.stringify(garage)),comparison:{...comparison},favoriteStations:[...favoriteStations]};
-  payload.integrity={algorithm:'SHA-256',hex:await archiveHash(payload),favoriteStationsHex:await favoritesHash(payload.favoriteStations)};
+  const payload={format:BACKUP_FORMAT,version:2,exportedAt:new Date().toISOString(),charges:charges.map(x=>({...x})),costs:expenses.map(x=>({...x})),garage:JSON.parse(JSON.stringify(garage)),comparison:{...comparison},favoriteStations:[...favoriteStations],personalTariffs:personalTariffs.map(x=>({...x}))};
+  payload.integrity={algorithm:'SHA-256',hex:await archiveHash(payload),favoriteStationsHex:await favoritesHash(payload.favoriteStations),personalTariffsHex:await personalTariffsHash(payload.personalTariffs)};
   const name=backupFilename();
   const json=JSON.stringify(payload,null,2);
   return new File([json],name,{type:'application/json'});
@@ -1243,12 +1338,25 @@ function planFullBackup(incoming) {
   const addGarage=!!incoming.garage && garageIsEmpty(garage) && !garageIsEmpty(incoming.garage);
   const addComparison=!!incoming.comparison && !comparisonStored;
   const favoriteAdditions=(incoming.favoriteStations||[]).filter(x=>!favoriteStations.includes(x));
-  return {newCharges,newCosts,counts,addGarage,addComparison,favoriteAdditions};
+  // Preserve local tariffs on name/id conflicts. Never overwrite a user's current tariff during restore.
+  const existingTariffIds=new Set(personalTariffs.map(x=>x.id));
+  const existingTariffNames=new Set(personalTariffs.map(x=>normalizedText(x.name)));
+  const tariffAdditions=[],tariffConflicts=[];
+  for(const entry of incoming.personalTariffs||[]){
+    if(existingTariffIds.has(entry.id) || existingTariffNames.has(normalizedText(entry.name))){
+      const same=personalTariffs.find(x=>x.id===entry.id || normalizedText(x.name)===normalizedText(entry.name));
+      if(same && (same.id!==entry.id || same.type!==entry.type || same.station!==entry.station || same.pricePerKwh!==entry.pricePerKwh || same.name!==entry.name)) tariffConflicts.push(entry.name);
+      continue;
+    }
+    if(personalTariffs.length+tariffAdditions.length>=30){tariffConflicts.push(entry.name);continue;}
+    tariffAdditions.push(entry);existingTariffIds.add(entry.id);existingTariffNames.add(normalizedText(entry.name));
+  }
+  return {newCharges,newCosts,counts,addGarage,addComparison,favoriteAdditions,tariffAdditions,tariffConflicts};
 }
 function planIdentity(plan) {
   return JSON.stringify({
     charges:plan.newCharges.map(x=>x.id),costs:plan.newCosts.map(x=>x.id),
-    ...plan.counts,garage:plan.addGarage,comparison:plan.addComparison,favorites:plan.favoriteAdditions,
+    ...plan.counts,garage:plan.addGarage,comparison:plan.addComparison,favorites:plan.favoriteAdditions,tariffs:plan.tariffAdditions,tariffConflicts:plan.tariffConflicts,
     snapshot:dbSnapshot()
   });
 }
@@ -1265,7 +1373,7 @@ function renderBackupPreview(plan,filename,exportedAt='',integrityInfo=null,inco
   const line=(s,warn=false)=>target.append(element('div',warn?'backup-preview-line warning':'backup-preview-line',s));
   line(`Файл: ${filename}`);
   if (integrityInfo) line(integrityInfo.description,!integrityInfo.verified);
-  if (incoming) line(`В архива: ${incoming.charges.length} зареждания, ${incoming.costs.length} разхода · Garage: ${incoming.garage?'включен':'липсва'} · Настройки: ${incoming.comparison?'включени':'липсват'} · Любими станции: ${incoming.favoriteStations?.length ?? 'стар формат'}`);
+  if (incoming) line(`В архива: ${incoming.charges.length} зареждания, ${incoming.costs.length} разхода · Garage: ${incoming.garage?'включен':'липсва'} · Настройки: ${incoming.comparison?'включени':'липсват'} · Любими станции: ${incoming.favoriteStations?.length ?? 'стар формат'} · Лични тарифи: ${incoming.personalTariffs?.length ?? 'стар формат'}`);
   if (exportedAt) {
     const stamp=new Date(exportedAt);
     if (!Number.isNaN(stamp.getTime())) line(`Дата на архива: ${stamp.toLocaleString('bg-BG')}`);
@@ -1275,11 +1383,12 @@ function renderBackupPreview(plan,filename,exportedAt='',integrityInfo=null,inco
   const conflicts=plan.counts.chargeConflict+plan.counts.costConflict;
   if (conflicts) line(`⚠ ${conflicts} конфликта: еднакъв ID, но различни данни. Няма да бъдат презаписани.`,true);
   line(`Garage: ${plan.addGarage?'ще се добави':'без промяна'} · настройки: ${plan.addComparison?'ще се добавят':'без промяна'} · нови любими: ${plan.favoriteAdditions.length}`);
-  if (!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison || plan.favoriteAdditions.length)) {
+  line(`Лични тарифи за добавяне: ${plan.tariffAdditions.length} · съвпадащи/конфликтни: ${plan.tariffConflicts.length} (без презаписване)`);
+  if (!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison || plan.favoriteAdditions.length || plan.tariffAdditions.length)) {
     line('Няма данни за добавяне. Можеш да затвориш този преглед.');
   }
   $('backup-preview').hidden=false;
-  if (pendingBackup) pendingBackup.canRestore=!!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison || plan.favoriteAdditions.length);
+  if (pendingBackup) pendingBackup.canRestore=!!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison || plan.favoriteAdditions.length || plan.tariffAdditions.length);
   $('backup-commit').disabled=!$('backup-ack').checked || !pendingBackup?.canRestore;
 }
 async function previewBackupFile(file) {
@@ -1306,7 +1415,7 @@ async function commitFullBackup() {
     renderBackupPreview(plan,pendingBackup.filename,pendingBackup.exportedAt,pendingBackup.integrityInfo,pendingBackup.incoming);
     throw Error('Данните са се променили след прегледа. Провери новите бройки и потвърди отново.');
   }
-  if (!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison || plan.favoriteAdditions.length)) {
+  if (!(plan.newCharges.length || plan.newCosts.length || plan.addGarage || plan.addComparison || plan.favoriteAdditions.length || plan.tariffAdditions.length)) {
     notify('Няма нови данни за добавяне.');clearBackupPreview();return;
   }
   if (!confirm(`Добавяне на данни от архива?\n\nНови зареждания: ${plan.newCharges.length}\nНови разходи: ${plan.newCosts.length}\nКонфликтите се пропускат, съществуващите данни не се заменят.\n\nПродължаваме ли?`)) return;
@@ -1317,10 +1426,11 @@ async function commitFullBackup() {
     if (plan.addGarage) mStore.put({key:GARAGE_KEY,value:pendingBackup.incoming.garage});
     if (plan.addComparison) mStore.put({key:COMPARISON_KEY,value:pendingBackup.incoming.comparison});
     if (plan.favoriteAdditions.length) mStore.put({key:FAVORITES_KEY,value:[...favoriteStations,...plan.favoriteAdditions]});
+    if (plan.tariffAdditions.length) mStore.put({key:PERSONAL_TARIFFS_KEY,value:[...personalTariffs,...plan.tariffAdditions]});
   });
   const addedC=plan.newCharges.length,addedE=plan.newCosts.length;
   clearBackupPreview();
-  await refresh();loadGarageForm();loadComparisonForm();
+  await refresh();loadGarageForm();loadComparisonForm();clearPersonalTariffForm();
   notify(`Добавени: ${addedC} зареждания, ${addedE} разхода. Провери историята и направи нов backup.`);
 }
 /* --------------------- v0.4: legacy merger (preview-first) --------------------- */
@@ -1742,6 +1852,17 @@ function attachEvents() {
   $('month-prev').addEventListener('click',()=>moveOverviewMonth(-1));
   $('month-next').addEventListener('click',()=>moveOverviewMonth(1));
   $('month-today').addEventListener('click',()=>{overviewMonth=today().slice(0,7);renderHome();});
+  $('personal-tariff-form').addEventListener('submit',async event=>{
+    event.preventDefault();const button=$('personal-tariff-save');
+    try {
+      const entry=personalTariffFromForm();
+      button.disabled=true;
+      const next=editingPersonalTariffId?personalTariffs.map(x=>x.id===entry.id?entry:x):[...personalTariffs,entry];
+      await persistPersonalTariffs(next);clearPersonalTariffForm();
+      notify('Тарифата е запазена. Старите зареждания не са променени.');
+    } catch(error){notify(error.message,true);} finally{button.disabled=false;}
+  });
+  $('personal-tariff-cancel').addEventListener('click',clearPersonalTariffForm);
   $('type').addEventListener('change',defaultPrice);
   $('station').addEventListener('input',renderStationTariffSuggestion);
   $('use-station-tariff').addEventListener('click',()=>{
