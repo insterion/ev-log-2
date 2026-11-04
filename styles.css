@@ -135,3 +135,20 @@ p{line-height:1.55}
 .legacy-confirm{display:flex;gap:12px;align-items:center;border:1px solid var(--line);padding:14px;border-radius:12px;font-size:13px;line-height:1.5;margin-bottom:12px}
 .legacy-confirm input{width:22px;height:22px;flex-shrink:0}
 #legacy-commit,#legacy-reset{width:100%;margin-bottom:9px}
+
+/* v0.5 — after-import audit, search and local CSV download */
+.audit-panel{border-color:#356c70}
+.audit-overview{display:flex;flex-direction:column;gap:8px;margin:13px 0 20px}
+.audit-summary-row{background:#0f2732;border:1px solid #24535b;border-radius:9px;padding:10px 12px;font-size:13px;font-variant-numeric:tabular-nums}
+.audit-sources{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:12px;border-left:2px solid #397368;padding-left:12px;margin-top:5px}
+.audit-sources strong{color:var(--text)}
+.audit-panel h3{margin:20px 0 8px;font-size:15px}
+.audit-panel #audit-status{overflow-wrap:anywhere;line-height:1.6}
+.audit-groups{max-height:60vh;overflow:auto;overscroll-behavior:contain}
+.audit-group{border:1px solid var(--line);border-radius:12px;margin:8px 0;padding:12px}
+.audit-group summary{font-weight:700;font-size:13px;line-height:1.5;cursor:pointer}
+.audit-record{padding:10px 3px;border-bottom:1px solid var(--line);color:#c6d7e8;font-size:12px;overflow-wrap:anywhere;line-height:1.5}
+.audit-jump{margin-top:10px;width:100%}
+.audit-export-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}
+.audit-export-actions button{min-height:50px;white-space:normal;font-size:12px}
+@media(max-width:380px){.audit-export-actions{grid-template-columns:1fr}}

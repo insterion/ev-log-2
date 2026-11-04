@@ -11,8 +11,8 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="./styles.css">
   <title>EV Log 2.0</title>
-  <script src="./legacy-import.js" defer></script>
-  <script src="./app.js" defer></script>
+  <script src="./legacy-import-v050.js" defer></script>
+  <script src="./app-v050.js" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +20,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v0.4.1</span>
+      <span class="version">v0.5.0</span>
     </header>
 
     <main id="main">
@@ -82,6 +82,7 @@
         <p class="eyebrow">ЗАРЕЖДАНИЯ</p><h1 id="history-title">История</h1>
         <p class="muted">Преглеждай, редактирай и изтривай зареждания.</p>
         <label class="field">Период<select id="history-filter"><option value="all">Всички месеци</option></select></label>
+        <label class="field">Търси в зарежданията<input id="history-search" type="search" placeholder="Дата, kWh, станция, бележка…" autocomplete="off"></label>
         <div class="history-total"><span id="history-summary">0 записа</span><strong id="history-sum">£0.00</strong></div>
         <div id="history-list" class="record-list"><p class="empty">Няма записи.</p></div>
       </section>
@@ -113,6 +114,7 @@
         </form>
         <div class="form-grid">
           <label class="field">Период<select id="costs-filter"><option value="all">Всички месеци</option></select></label>
+        <label class="field">Търси в разходите<input id="costs-search" type="search" placeholder="Дата, сума, описание, бележка…" autocomplete="off"></label>
           <label class="field">Автомобил<select id="cost-target-filter"><option value="all">Всички</option><option value="ev">EV</option><option value="ice">ICE</option><option value="both">И двата</option><option value="other">Неуточнен</option></select></label>
         </div>
         <div class="history-total"><span id="costs-summary">0 разхода</span><strong id="costs-sum">£0.00</strong></div>
@@ -216,9 +218,23 @@
           <button id="export-backup" class="primary" type="button">Изтегли пълен JSON backup</button>
           <p class="tiny" id="backup-count">—</p>
         </div>
+        <div class="panel audit-panel" id="audit-panel">
+          <h2>🔍 Проверка на обединените записи</h2>
+          <p>Преглед на зарежданията и разходите, включително вероятни дубликати след импорта. <strong>Само за проверка — нищо не се изтрива автоматично.</strong></p>
+          <div id="audit-overview" class="audit-overview" aria-live="polite">Зареждане на обобщението…</div>
+          <button id="audit-run" class="primary" type="button">Провери за възможни повторения</button>
+          <p class="tiny" id="audit-status" aria-live="polite">Проверката сравнява дата, количество и цена (или категория и сума).</p>
+          <div id="audit-groups" class="audit-groups"></div>
+          <h3>Експорт за собствена проверка</h3>
+          <p class="tiny">CSV файловете могат да се отварят в Excel или Google Sheets. <strong>JSON backup остава основният начин за възстановяване.</strong></p>
+          <div class="audit-export-actions">
+            <button id="export-charges-csv" class="secondary" type="button">⬇ Зареждания CSV</button>
+            <button id="export-costs-csv" class="secondary" type="button">⬇ Разходи CSV</button>
+          </div>
+        </div>
         <div class="panel">
           <h2>📥 Възстановяване</h2>
-          <p>Избери архив от EV Log 2.0 v0.1–v0.4.1. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
+          <p>Избери архив от EV Log 2.0 v0.1–v0.5.0. Новите записи се <strong>добавят</strong>, а повторенията се пропускат. Данните за автомобила се импортират само ако Garage е празен.</p>
           <label class="file-button" for="import-backup">Избери JSON файл</label>
           <input type="file" id="import-backup" accept=".json,application/json" class="visually-hidden">
           <p class="tiny" id="selected-file">Няма избран файл</p>
@@ -231,6 +247,7 @@
         </div>
         <div class="panel legacy-panel" id="legacy-panel">
           <h2>🔄 Импорт от старите EV Log приложения</h2>
+          <p class="tiny" id="legacy-module-check" aria-live="polite">Проверка на импорт модула…</p>
           <p><strong>Безопасно сливане:</strong> данните не се записват, докато не прегледаш резултата и не натиснеш „Добави избраните“. Нищо съществуващо не се заменя или изтрива.</p>
           <p class="tiny">Вариант 1: От EV Log Cloud използвай <strong>Logs.csv</strong> и <strong>Costs.csv</strong>. Можеш да избираш двата файла наведнъж или поотделно.</p>
           <label class="file-button legacy-upload" for="legacy-files">📂 Избери стари CSV / JSON файлове</label>
@@ -255,7 +272,7 @@
         </div>
         <div class="panel subtle-panel">
           <h2>ℹ️ За приложението</h2>
-          <p><strong>EV Log 2.0 · v0.4.1</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
+          <p><strong>EV Log 2.0 · v0.5.0</strong><br>Без акаунти, Firebase и автоматична облачна синхронизация.</p>
           <p class="tiny">Изчистването на site data в Chrome може да изтрие записите. Прави резервно копие преди промени или смяна на телефон.</p>
         </div>
       </section>
