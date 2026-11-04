@@ -235,3 +235,23 @@ p{line-height:1.55}
 .transfer-guide ol{padding-left:23px;margin:10px 0 14px;line-height:1.65}
 .transfer-guide li{padding:4px 0;font-size:14px}
 #share-backup[hidden]{display:none}
+
+
+/* v1.4 — date-to-date analysis and independent two-month comparison. */
+.stats-custom-range{margin-top:2px;border-color:#365c69}
+.stats-custom-range[hidden]{display:none}
+.stats-custom-range .field{margin:8px 0 13px}
+.stats-custom-range .secondary{width:100%;min-height:46px}
+.stats-custom-range .small-note{margin-top:11px;line-height:1.5}
+.stats-scope-caption{margin:9px 0 15px;line-height:1.5}
+.stats-month-compare .field{margin:8px 0 13px}
+.month-compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}
+.month-compare-card{min-width:0;background:#102538;border:1px solid #315067;border-radius:12px;padding:12px 10px}
+.month-compare-label{display:block;font-size:12px;font-weight:750;line-height:1.5;color:#cfe5ed;padding-bottom:9px}
+.month-compare-line{display:flex;flex-direction:column;gap:3px;padding:7px 0;border-top:1px solid #294458;min-width:0}
+.month-compare-line span{font-size:11px;color:var(--muted)}
+.month-compare-line strong{font-size:14px;overflow-wrap:anywhere}
+.month-compare-difference{display:flex;flex-direction:column;gap:6px;border:1px solid #35685e;background:#102e30;border-radius:12px;padding:12px;margin-top:12px}
+.month-compare-difference strong{font-size:21px;color:var(--accent);overflow-wrap:anywhere}
+.month-compare-difference .small-note{margin:0;line-height:1.5}
+@media(max-width:365px){.month-compare-grid{grid-template-columns:1fr}}

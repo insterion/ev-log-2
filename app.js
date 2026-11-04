@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v1.3.0
+/* EV Log 2.0 v1.4.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -52,6 +52,9 @@ let toastTimeout;
 let installEvent = null;
 // Dashboard month selection is UI-only and is not stored in IndexedDB.
 let overviewMonth = today().slice(0,7);
+// Read-only analysis controls. Nothing is stored in IndexedDB or added to backups.
+let customRange = {from:localDate(new Date(new Date().getFullYear(),new Date().getMonth(),1)),to:today()};
+
 
 function defaultComparison() {
   return {distanceMiles:100,efficiencyMiKwh:3.5,iceMpgUk:45,fuelPriceLitre:1.50,priceMode:'history',manualPriceKwh:0.56};
@@ -691,20 +694,106 @@ function updateManualPriceVisibility() {
 function periodScope() {
   const period=$('stats-period').value;
   const now=today().slice(0,7);
-  const count=period==='all'?null:Number(period);
-  const first=count===null?'':localDate(new Date(new Date().getFullYear(),new Date().getMonth()-count+1,1)).slice(0,7);
-  const inPeriod=x=>count===null || (x.date.slice(0,7)>=first && x.date.slice(0,7)<=now);
-  const selectedCharges=charges.filter(inPeriod);
-  const selectedExpenses=expenses.filter(inPeriod);
-  let months=[];
-  if (count===null) {
-    months=[...new Set([...selectedCharges,...selectedExpenses].map(x=>x.date.slice(0,7)))].sort();
-    if(months.length>36)months=months.slice(-36);
+  const count=['3','6','12'].includes(period)?Number(period):null;
+  let selectedCharges,selectedExpenses,months=[];
+  if (period==='custom') {
+    const {from,to}=customRange;
+    const inPeriod=x=>x.date>=from && x.date<=to;
+    selectedCharges=charges.filter(inPeriod);
+    selectedExpenses=expenses.filter(inPeriod);
+    const fromMonth=from.slice(0,7),toMonth=to.slice(0,7);
+    const [fy,fm]=fromMonth.split('-').map(Number);
+    const [ty,tm]=toMonth.split('-').map(Number);
+    const span=(ty-fy)*12+(tm-fm)+1;
+    if(span>0 && span<=36) {
+      for(let i=0;i<span;i++)months.push(localDate(new Date(fy,fm-1+i,1)).slice(0,7));
+    } else {
+      months=[...new Set([...selectedCharges,...selectedExpenses].map(x=>x.date.slice(0,7)))].sort().slice(-36);
+    }
+  } else if (period==='all') {
+    selectedCharges=charges;
+    selectedExpenses=expenses;
+    months=[...new Set([...selectedCharges,...selectedExpenses].map(x=>x.date.slice(0,7)))].sort().slice(-36);
   } else {
-    for(let i=count-1;i>=0;i--) months.push(localDate(new Date(new Date().getFullYear(),new Date().getMonth()-i,1)).slice(0,7));
+    const first=localDate(new Date(new Date().getFullYear(),new Date().getMonth()-count+1,1)).slice(0,7);
+    const inPeriod=x=>x.date.slice(0,7)>=first && x.date.slice(0,7)<=now;
+    selectedCharges=charges.filter(inPeriod);
+    selectedExpenses=expenses.filter(inPeriod);
+    for(let i=count-1;i>=0;i--)months.push(localDate(new Date(new Date().getFullYear(),new Date().getMonth()-i,1)).slice(0,7));
   }
   return {selectedCharges,selectedExpenses,months,period};
 }
+function monthValid(value) {
+  return typeof value==='string' && /^\d{4}-\d{2}$/.test(value) && dateValid(`${value}-01`);
+}
+function compareMonthValues(month) {
+  const foundCharges=charges.filter(x=>x.date.startsWith(month));
+  const foundExpenses=expenses.filter(x=>x.date.startsWith(month));
+  const charging=foundCharges.reduce((total,x)=>total+chargeTotal(x),0);
+  const other=foundExpenses.reduce((total,x)=>total+x.amount,0);
+  const kwh=foundCharges.reduce((total,x)=>total+x.kwh,0);
+  return {month,charging,other,total:charging+other,kwh,chargeCount:foundCharges.length,expenseCount:foundExpenses.length};
+}
+function renderMonthComparison() {
+  const box=$('stats-month-comparison');box.replaceChildren();
+  const left=$('stats-month-a').value,right=$('stats-month-b').value;
+  if(!monthValid(left) || !monthValid(right)) {
+    box.append(element('p','small-note','Избери два валидни месеца за сравнение.'));
+    return;
+  }
+  const a=compareMonthValues(left),b=compareMonthValues(right);
+  const wrap=element('div','month-compare-grid');
+  for (const [item,tag] of [[a,'A'],[b,'B']]) {
+    const card=element('div','month-compare-card');
+    card.append(element('span','month-compare-label',`Месец ${tag} · ${monthName(item.month)}`));
+    const metrics=[
+      ['Общо разходи',money(item.total)],
+      ['Зареждане',money(item.charging)],
+      ['Други разходи',money(item.other)],
+      ['Заредено',energyFormat(item.kwh)],
+      ['Зареждания',String(item.chargeCount)],
+      ['Средно £/kWh',item.kwh>0?'£'+(item.charging/item.kwh).toFixed(3):'—']
+    ];
+    for(const [label,value] of metrics) {
+      const line=element('div','month-compare-line');
+      line.append(element('span','',label),element('strong','',value));card.append(line);
+    }
+    wrap.append(card);
+  }
+  box.append(wrap);
+  const diff=roundPence(b.total-a.total);
+  const display=diff===0?'£0.00':(diff>0?'+':'−')+money(Math.abs(diff));
+  const percentage=a.total>0?`${Math.abs(diff/a.total*100).toFixed(1)}%`:'—';
+  const info=element('div','month-compare-difference');
+  info.append(element('span','small-note','Разлика в общите разходи: B спрямо A'));
+  info.append(element('strong','',`${display}${percentage!=='—'?' ('+percentage+')':''}`));
+  let explanation='Общите разходи са еднакви.';
+  if(diff>0)explanation='През месец B общите записани разходи са по-високи.';
+  if(diff<0)explanation='През месец B общите записани разходи са по-ниски.';
+  if(a.total===0)explanation+=' Няма ненулева база за процентно сравнение с месец A.';
+  info.append(element('p','small-note',explanation));
+  box.append(info);
+}
+function renderCustomRangeControls() {
+  const active=$('stats-period').value==='custom';
+  $('stats-custom-range').hidden=!active;
+  if(active) {
+    $('stats-range-status').textContent=`Приложено: ${fmtDate(customRange.from)} – ${fmtDate(customRange.to)}.`;
+  }
+}
+function applyCustomRange() {
+  const from=$('stats-date-from').value,to=$('stats-date-to').value;
+  if(!dateValid(from) || !dateValid(to)) {
+    $('stats-range-status').textContent='⚠ Избери две валидни дати.';
+    return;
+  }
+  if(from>to) {
+    $('stats-range-status').textContent='⚠ Началната дата трябва да бъде преди или равна на крайната.';
+    return;
+  }
+  customRange={from,to};renderStats();
+}
+
 function energyFormat(kwh) {
   return Number(kwh).toLocaleString('en-GB',{minimumFractionDigits:0,maximumFractionDigits:2})+' kWh';
 }
@@ -839,7 +928,12 @@ function renderMileageEstimate(scope=periodScope()) {
   target.append(element('p','small-note','Началният ден е изключен от сумата; последният е включен. Разликата в нивото на батерията не се отчита.'));
 }
 function renderStats() {
+  renderCustomRangeControls();
+  renderMonthComparison();
   const scope=periodScope();
+  $('stats-scope-caption').textContent=scope.period==='custom'
+    ?`Период: ${fmtDate(customRange.from)} – ${fmtDate(customRange.to)} · включително.`
+    :scope.period==='all'?'Период: всички въведени записи.':`Период: последните ${scope.period} календарни месеца, включително текущия.`;
   const cs=scope.selectedCharges,ex=scope.selectedExpenses;
   const charging=cs.reduce((sum,x)=>sum+chargeTotal(x),0);
   const extra=ex.reduce((sum,x)=>sum+x.amount,0);
@@ -1489,7 +1583,21 @@ function attachEvents() {
   $('costs-filter').addEventListener('change',renderCosts);
   $('costs-search').addEventListener('input',renderCosts);
   $('cost-target-filter').addEventListener('change',renderCosts);
+  // Dates and month selectors affect only the analysis view (no database writes).
+  $('stats-date-from').value=customRange.from;
+  $('stats-date-to').value=customRange.to;
+  const thisMonth=today().slice(0,7);
+  const previousMonth=localDate(new Date(new Date().getFullYear(),new Date().getMonth()-1,1)).slice(0,7);
+  $('stats-month-a').value=previousMonth;
+  $('stats-month-b').value=thisMonth;
   $('stats-period').addEventListener('change',renderStats);
+  for(const id of ['stats-date-from','stats-date-to']) $(id).addEventListener('input',()=>{
+    if($('stats-period').value==='custom') $('stats-range-status').textContent='Датите са променени. Натисни „Покажи периода“, за да обновиш статистиката.';
+  });
+  $('stats-apply-range').addEventListener('click',applyCustomRange);
+  $('stats-month-a').addEventListener('change',renderMonthComparison);
+  $('stats-month-b').addEventListener('change',renderMonthComparison);
+  renderMonthComparison();
   $('compare-price-mode').addEventListener('change',()=>{updateManualPriceVisibility();try{renderComparison(comparisonFromForm());}catch(_){}});
   $('comparison-form').addEventListener('input',()=>{try{renderComparison(comparisonFromForm());}catch(_){}});
   $('comparison-form').addEventListener('submit',async event=>{
