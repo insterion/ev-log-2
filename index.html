@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=200">
+  <link rel="stylesheet" href="./styles.css?v=210">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=200" defer></script>
+  <script src="./app.js?v=210" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Към съдържанието</a>
@@ -21,7 +21,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v2.0.0</span>
+      <span class="version">v2.1.0</span>
     </header>
 
     <main id="main" tabindex="-1">
@@ -124,6 +124,22 @@
           <div class="total-preview"><span>Изчислена сума</span><strong id="preview-total">—</strong></div>
           <div id="charge-entry-warnings" class="charge-entry-warnings" role="status" aria-live="polite" hidden></div>
           <label class="field">Бележки (по желание)<textarea id="notes" maxlength="500" rows="3" placeholder="Допълнителни подробности"></textarea></label>
+          <div class="panel charge-review-panel" aria-label="Проверка на зареждането преди запис">
+            <h2>🔍 Проверка преди запис</h2>
+            <p class="tiny">Виж данните и сумата, преди да натиснеш „Запази зареждането“. Прегледът <strong>не записва нищо</strong>.</p>
+            <button class="secondary action-large" id="charge-review-open" type="button">Провери зареждането</button>
+            <div id="charge-review" class="charge-review" role="status" aria-live="polite" hidden></div>
+          </div>
+          <div class="panel charge-draft-panel" aria-labelledby="charge-draft-title">
+            <h2 id="charge-draft-title">📝 Незавършено зареждане</h2>
+            <p class="tiny">Можеш ръчно да запазиш чернова и да продължиш по-късно. Тя е само на това устройство, <strong>не е реален запис</strong> и <strong>не влиза в JSON Backup</strong>.</p>
+            <p id="charge-draft-status" class="small-note" role="status" aria-live="polite">Проверка за чернова…</p>
+            <div class="charge-draft-actions">
+              <button class="secondary" id="charge-draft-save" type="button">Запази чернова</button>
+              <button class="secondary" id="charge-draft-restore" type="button" disabled>Възстанови</button>
+              <button class="text-button" id="charge-draft-delete" type="button" disabled>Изтрий черновата</button>
+            </div>
+          </div>
           <button class="primary action-large" id="save-charge" type="submit">Запази зареждането</button>
           <div class="form-actions"><button class="secondary" id="same-as-last" type="button">↺ Последната станция</button><button class="secondary" id="cancel-edit" type="button">Изчисти формата</button></div>
         </form>

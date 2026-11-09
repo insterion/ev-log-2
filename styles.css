@@ -367,3 +367,23 @@ input,select,textarea{font-size:16px}
 }
 @media(max-width:330px){.nav-item{flex:1 0 50px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.scroll-top,.update-banner{transition:none}}
+
+
+/* v2.1 — read-only charge review and explicitly controlled local-only draft. */
+.charge-review-panel,.charge-draft-panel{margin-top:15px;padding:14px;border-radius:15px}
+.charge-review-panel h2,.charge-draft-panel h2{font-size:16px;margin:0 0 8px}
+.charge-review-panel>.tiny,.charge-draft-panel>.tiny{line-height:1.55;margin:0 0 11px}
+.charge-review[hidden]{display:none!important}
+.charge-review{margin-top:12px;padding:12px;border:1px solid #427d70;background:#102b2f;border-radius:12px}
+.charge-review h3{margin:0 0 10px;font-size:14px;color:#d4fff0}
+.charge-review dl{margin:0;display:grid;grid-template-columns:minmax(90px,38%) minmax(0,1fr);column-gap:9px;row-gap:9px}
+.charge-review dt{font-size:12px;color:var(--muted)}
+.charge-review dd{font-size:13px;margin:0;font-weight:700;overflow-wrap:anywhere}
+.charge-review .review-total{color:var(--accent);font-size:16px}
+.charge-review .review-warning{color:#ffdda2;border-top:1px solid #64523b;padding-top:7px;margin:12px 0 0;font-size:12px;line-height:1.5}
+.charge-review .review-info{margin:12px 0 0;color:var(--muted);font-size:12px}
+.charge-draft-actions{display:flex;gap:8px;flex-wrap:wrap}
+.charge-draft-actions button{min-height:44px;flex:1 1 128px}
+.charge-draft-actions button:disabled{opacity:.45;cursor:not-allowed}
+.charge-draft-panel .small-note{margin:4px 0 12px;font-size:12px;line-height:1.5}
+@media(max-width:370px){.charge-review dl{grid-template-columns:1fr}.charge-review dt{margin-bottom:-7px}}

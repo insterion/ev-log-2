@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v2.0.0
+/* EV Log 2.0 v2.1.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -14,6 +14,9 @@ const COMPARISON_KEY = 'comparison:settings';
 const FAVORITES_KEY = 'charging:favourites';
 const PERSONAL_TARIFFS_KEY = 'charging:personal-tariffs';
 const BACKUP_FORMAT = 'ev-log-2';
+// v2.1: manual draft is intentionally outside IndexedDB and JSON backups.
+const CHARGE_DRAFT_KEY = 'evlog2.charge-draft.v1';
+const CHARGE_DRAFT_FIELDS = ['date','odometer','type','kwh','price','station','notes'];
 const PRICE_HINTS = { public:0.56, rapid:0.79, home:0.24, work:0 };
 const TYPE_NAMES = { public:'Публично AC', rapid:'Бързо DC', home:'Домашно', work:'Служебно / друго' };
 const COST_NAMES = { insurance:'Insurance', mot:'MOT', tax:'Road tax / VED', service:'Service', tyres:'Гуми', repair:'Ремонт', parking:'Паркинг', cleaning:'Миене / грижа', fuel:'Гориво (ICE)', other:'Друго' };
@@ -409,6 +412,116 @@ function garageFromForm() {
     }
   });
 }
+/* v2.1 — read-only review and opt-in draft. No changes to IndexedDB or backup schema. */
+function hideChargeReview() {
+  const target=$('charge-review');
+  if(target) target.hidden=true;
+}
+function showChargeReview() {
+  const target=$('charge-review');
+  try {
+    const item=chargeFromForm(); // validates data; does NOT call saveCharge.
+    const warnings=chargeEntryWarnings(item);
+    target.replaceChildren();
+    target.append(element('h3','',chargeEditingId?'Проверка на редакцията':'Проверка на новото зареждане'));
+    const list=element('dl','');
+    const rows=[
+      ['Дата',fmtDate(item.date)],
+      ['Вид',TYPE_NAMES[item.type]],
+      ['Станция',item.station || '—'],
+      ['Количество',`${item.kwh} kWh`],
+      ['Цена',`£${item.pricePerKwh}/kWh`],
+      ['Общо',money(chargeTotal(item))],
+      ['Километраж',item.odometerMiles===null?'Не е въведен':`${item.odometerMiles.toLocaleString('en-GB')} mi`],
+      ['Бележки',item.notes || '—']
+    ];
+    for(const [key,value] of rows) {
+      list.append(element('dt','',key),element('dd',key==='Общо'?'review-total':'',value));
+    }
+    target.append(list);
+    if(warnings.length){
+      const p=element('p','review-warning','⚠ '+warnings.join(' · '));target.append(p);
+    }
+    target.append(element('p','review-info','Това е само преглед. За истински запис натисни „Запази зареждането“.'));
+    target.hidden=false;
+  } catch(error) {
+    target.replaceChildren(element('p','review-warning',`Не може да се провери записът: ${error.message}`));
+    target.hidden=false;
+    notify(error.message,true);
+  }
+}
+function chargeDraftValues() {
+  return Object.fromEntries(CHARGE_DRAFT_FIELDS.map(id=>[id,$(id).value]));
+}
+function readChargeDraft() {
+  // Reading an unavailable or corrupt localStorage never affects main database.
+  const raw=localStorage.getItem(CHARGE_DRAFT_KEY);
+  if(raw===null)return null;
+  if(raw.length>12000)throw Error('Черновата е прекалено голяма. Не е възстановена.');
+  let payload;
+  try {payload=JSON.parse(raw);}catch(_){throw Error('Черновата не е валиден JSON. Не е възстановена.');}
+  if(!payload || payload.version!==1 || typeof payload.savedAt!=='string' || !Number.isFinite(Date.parse(payload.savedAt)) ||
+     !payload.form || typeof payload.form!=='object' || Array.isArray(payload.form)) throw Error('Невалиден формат на черновата.');
+  const max={date:10,odometer:20,type:20,kwh:25,price:25,station:120,notes:500};
+  for(const key of CHARGE_DRAFT_FIELDS) {
+    if(typeof payload.form[key]!=='string' || payload.form[key].length>max[key]) throw Error('Черновата съдържа невалидно поле: '+key);
+  }
+  if(payload.form.date && !dateValid(payload.form.date))throw Error('Черновата съдържа невалидна дата.');
+  if(!Object.hasOwn(TYPE_NAMES,payload.form.type))throw Error('Черновата съдържа невалиден тип зареждане.');
+  return payload;
+}
+function updateChargeDraftStatus() {
+  const status=$('charge-draft-status');if(!status)return;
+  const editing=!!chargeEditingId;
+  $('charge-draft-save').disabled=editing;
+  let draft=null,problem='';
+  try{draft=readChargeDraft();}catch(error){problem=error.message;}
+  $('charge-draft-restore').disabled=editing || !draft;
+  $('charge-draft-delete').disabled=!draft && !problem;
+  if(editing)status.textContent='Редактираш съществуващ запис. Черновите са само за нови зареждания.';
+  else if(problem)status.textContent='⚠ '+problem+' Можеш да я изтриеш, без да променяш реалната история.';
+  else if(!draft)status.textContent='Няма запазена чернова.';
+  else status.textContent=`Има чернова от ${new Date(draft.savedAt).toLocaleString('bg-BG')}. Възстановяването е само с твое потвърждение.`;
+}
+function saveChargeDraft() {
+  if(chargeEditingId)return notify('Чернова се запазва само за ново зареждане, не при редакция.',true);
+  try {
+    const existing=readChargeDraft();
+    if(existing && !confirm('Има стара чернова. Да я заменя с текущите полета?'))return;
+    const payload={version:1,savedAt:new Date().toISOString(),form:chargeDraftValues()};
+    localStorage.setItem(CHARGE_DRAFT_KEY,JSON.stringify(payload));
+    updateChargeDraftStatus();notify('Черновата е запазена само на това устройство. Не е добавена в История.');
+  } catch(error) {notify('Не можах да запазя черновата: '+error.message,true);updateChargeDraftStatus();}
+}
+function restoreChargeDraft() {
+  if(chargeEditingId)return notify('Първо откажи редактирането на текущия запис.',true);
+  let draft;
+  try {draft=readChargeDraft();if(!draft)throw Error('Няма чернова.');}
+  catch(error) {updateChargeDraftStatus();return notify(error.message,true);}
+  if(!confirm('Да заменя текущите полета със запазената чернова? Незапазените промени във формата ще се загубят.'))return;
+  for(const key of CHARGE_DRAFT_FIELDS)$(key).value=draft.form[key];
+  renderChargeHelpers();updateChargeDraftStatus();
+  notify('Черновата е възстановена във формата. Провери и запази зареждането, когато си готов.');
+}
+function deleteChargeDraft() {
+  if(!confirm('Да изтрия само запазената чернова? Реалните зареждания няма да се променят.'))return;
+  try{localStorage.removeItem(CHARGE_DRAFT_KEY);updateChargeDraftStatus();notify('Черновата е изтрита. Историята е непроменена.');}
+  catch(error){notify('Черновата не можа да бъде изтрита: '+error.message,true);}
+}
+function clearMatchingDraftAfterChargeSaved(entry) {
+  // Optional cleanup only when saved record truly matches the manually saved form.
+  try {
+    const draft=readChargeDraft();if(!draft)return;
+    const form=draft.form;
+    const same=entry.date===form.date && entry.type===form.type && entry.station===form.station.trim() &&
+      entry.notes===form.notes.trim() && String(entry.kwh)===String(Number(form.kwh)) &&
+      String(entry.pricePerKwh)===String(Number(form.price)) &&
+      String(entry.odometerMiles??'')===String(form.odometer===''?'':Number(form.odometer));
+    if(same)localStorage.removeItem(CHARGE_DRAFT_KEY);
+  }catch(_){} // A draft storage problem must never invalidate a successful charge save.
+  updateChargeDraftStatus();
+}
+
 function resetChargeForm() {
   chargeEditingId = null;
   $('charge-form').reset(); $('date').value = today(); $('type').value = 'public';
@@ -417,7 +530,7 @@ function resetChargeForm() {
   $('form-subtitle').textContent='Попълни информацията от зарядната станция.';
   $('save-charge').textContent='Запази зареждането';
   $('cancel-edit').textContent='Изчисти формата';
-  renderChargeHelpers();
+  renderChargeHelpers();updateChargeDraftStatus();
 }
 function defaultPrice() {
   const type = $('type').value;
@@ -491,6 +604,7 @@ function entryWarningsFromForm() {
   });
 }
 function updatePreview() {
+  hideChargeReview();
   const rawKwh=$('kwh').value.trim(),rawPrice=$('price').value.trim();
   const kwh=rawKwh===''?NaN:Number(rawKwh),price=rawPrice===''?NaN:Number(rawPrice);
   const valid=Number.isFinite(kwh) && kwh>0 && kwh<=1000 && Number.isFinite(price) && price>=0 && price<=10;
@@ -516,7 +630,7 @@ function editCharge(id) {
   $('form-subtitle').textContent='Промени полетата и запази.';
   $('save-charge').textContent='Запази промените';
   $('cancel-edit').textContent='Откажи редакцията';
-  renderChargeHelpers(); navigate('charge');
+  renderChargeHelpers();updateChargeDraftStatus(); navigate('charge');
 }
 function resetExpenseForm() {
   expenseEditingId=null;
@@ -1998,6 +2112,13 @@ function attachEvents() {
     notify('Приложих последната записана цена. Провери дали още е актуална.');
   });
   for(const field of ['kwh','price','odometer','date'])$(field).addEventListener('input',updatePreview);
+  // Review becomes stale after any edit, including station and notes.
+  $('charge-form').addEventListener('input',hideChargeReview);
+  $('charge-form').addEventListener('change',hideChargeReview);
+  $('charge-review-open').addEventListener('click',showChargeReview);
+  $('charge-draft-save').addEventListener('click',saveChargeDraft);
+  $('charge-draft-restore').addEventListener('click',restoreChargeDraft);
+  $('charge-draft-delete').addEventListener('click',deleteChargeDraft);
   $('charge-form').addEventListener('submit',async event=>{
     event.preventDefault();const b=$('save-charge');
     try {
@@ -2005,7 +2126,7 @@ function attachEvents() {
       const warnings=chargeEntryWarnings(item);
       if(warnings.length && !confirm(`Провери следното преди запис:\n\n${warnings.map(w=>'• '+w).join('\n')}\n\nСигурен ли си, че записът е правилен?`))return;
       if(!confirmExactDuplicate(item,'charge'))return;
-      b.disabled=true;await saveCharge(item);await refresh();resetChargeForm();navigate('home');notify('Зареждането е запазено.');
+      b.disabled=true;await saveCharge(item);clearMatchingDraftAfterChargeSaved(item);await refresh();resetChargeForm();navigate('home');notify('Зареждането е запазено.');
     }
     catch (error) {notify(error.message,true);}finally {b.disabled=false;}
   });
