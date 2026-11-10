@@ -1,5 +1,5 @@
 'use strict';
-/* EV Log 2.0 v2.1.0
+/* EV Log 2.0 v2.2.0
  * Keep the SAME IndexedDB database and version as v0.1. Charges remain unchanged.
  * Store costs, garage and comparison preferences in the existing "meta" store.
  * No cloud requests, analytics, external JS or account.
@@ -878,6 +878,41 @@ function renderHomeGlance(monthCharges) {
   }
 }
 
+/* v2.2 — read-only comparison of the chosen calendar month to the preceding one.
+ * A month with no recorded charges is not treated as evidence of savings.
+ * No new IndexedDB data, meta settings, backup fields or localStorage keys.
+ */
+function renderHomeMonthDelta(current,monthCharges,currentCost,currentKwh) {
+  const previous=shiftedMonth(current,-1);
+  const previousCharges=charges.filter(x=>x.date.slice(0,7)===previous);
+  const previousCost=previousCharges.reduce((sum,x)=>sum+chargeTotal(x),0);
+  const previousKwh=previousCharges.reduce((sum,x)=>sum+x.kwh,0);
+  const previousCount=previousCharges.length;
+  const currentCount=monthCharges.length;
+  const numberKwh=value=>Number(value).toFixed(2)+' kWh';
+  const numberPrice=(cost,kwh)=>`${(cost/kwh*100).toFixed(2)}p/kWh`;
+  const signed=(value,unit,places=2)=>{
+    const clean=Math.abs(value)<Math.pow(10,-places)/2?0:value;
+    const prefix=clean>0?'+':clean<0?'−':'';
+    const magnitude=Math.abs(clean).toFixed(places);
+    return unit==='money'?`${prefix}£${magnitude}`:unit==='kwh'?`${prefix}${magnitude} kWh`:`${prefix}${magnitude}p/kWh`;
+  };
+  $('month-compare-period').textContent=`${monthName(previous)} (${previousCount} зареждания) → ${monthName(current)} (${currentCount} зареждания)`;
+  $('month-compare-cost-values').textContent=`${money(previousCost)} → ${money(currentCost)}`;
+  $('month-compare-kwh-values').textContent=`${numberKwh(previousKwh)} → ${numberKwh(currentKwh)}`;
+  $('month-compare-price-values').textContent=previousKwh>0 && currentKwh>0
+    ?`${numberPrice(previousCost,previousKwh)} → ${numberPrice(currentCost,currentKwh)}`:'Няма две средни цени за сравнение';
+  const valid=previousCount>0 && currentCount>0 && previousKwh>0 && currentKwh>0;
+  $('month-compare-cost-delta').textContent=valid?signed(currentCost-previousCost,'money'):'—';
+  $('month-compare-kwh-delta').textContent=valid?signed(currentKwh-previousKwh,'kwh'):'—';
+  $('month-compare-price-delta').textContent=valid?signed((currentCost/currentKwh-previousCost/previousKwh)*100,'price'):'—';
+  const currentIsOpenMonth=current===today().slice(0,7);
+  $('month-compare-note').textContent=!valid
+    ?'За разлика между месеците са нужни записани зареждания и в двата. Нулевият брой записи не означава нулеви реални разходи.'
+    :currentIsOpenMonth
+      ?'Текущият месец още не е приключил. Разликите са само за записаните до момента зареждания, а не измерени спестявания.'
+      :'Промените в разходите зависят и от количеството заредена енергия. Това не е изчисление на спестявания.';
+}
 function renderHome() {
   const current=overviewMonth;
   const monthCharges=charges.filter(x=>x.date.slice(0,7)===current);
@@ -895,6 +930,7 @@ function renderHome() {
   $('month-all').textContent=money(charging+cost);
   $('month-price').textContent=kwh>0?money(charging/kwh):'—';
   $('month-count').textContent=String(monthCharges.length);
+  renderHomeMonthDelta(current,monthCharges,charging,kwh);
   renderHomeGlance(monthCharges);
   renderList($('recent-list'),charges.slice(0,3),chargeCard,false,'Все още няма зареждания.');
   renderList($('recent-costs'),expenses.slice(0,2),expenseCard,false,'Все още няма други разходи.');

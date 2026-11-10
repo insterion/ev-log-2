@@ -9,10 +9,10 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <link rel="manifest" href="./manifest.json">
-  <link rel="stylesheet" href="./styles.css?v=210">
+  <link rel="stylesheet" href="./styles.css?v=220">
   <title>EV Log 2.0</title>
   <script src="./legacy-import.js?v=080" defer></script>
-  <script src="./app.js?v=210" defer></script>
+  <script src="./app.js?v=220" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Към съдържанието</a>
@@ -21,7 +21,7 @@
       <div class="brand-mark" aria-hidden="true">ϟ</div>
       <div class="brand-copy"><strong>EV Log <span>2.0</span></strong><small>Личен дневник за автомобила</small></div>
       <button class="header-data" data-go="data" type="button" title="Архив и настройки" aria-label="Данни и архив">⚙</button>
-      <span class="version">v2.1.0</span>
+      <span class="version">v2.2.0</span>
     </header>
 
     <main id="main" tabindex="-1">
@@ -44,6 +44,28 @@
           <div class="stat-card total-stat"><span>Общо за месеца</span><strong id="month-all">£0.00</strong><small>Зареждания + други разходи</small></div>
           <div class="stat-card"><span>Средна цена</span><strong id="month-price">—</strong><small>£/kWh · <span id="month-count">0</span> зареждания</small></div>
         </div>
+        <details class="panel month-compare-panel" id="month-compare-panel">
+          <summary>↔ Сравнение с предишния месец</summary>
+          <p class="small-note month-compare-period" id="month-compare-period">Изчисляване на периода…</p>
+          <div class="month-compare-grid" aria-live="polite">
+            <div class="month-compare-item">
+              <span>Разходи за зареждане</span>
+              <strong id="month-compare-cost-delta">—</strong>
+              <small id="month-compare-cost-values">—</small>
+            </div>
+            <div class="month-compare-item">
+              <span>Заредени kWh</span>
+              <strong id="month-compare-kwh-delta">—</strong>
+              <small id="month-compare-kwh-values">—</small>
+            </div>
+            <div class="month-compare-item">
+              <span>Средна цена (по kWh)</span>
+              <strong id="month-compare-price-delta">—</strong>
+              <small id="month-compare-price-values">—</small>
+            </div>
+          </div>
+          <p class="tiny" id="month-compare-note">Сравняват се само въведените зареждания.</p>
+        </details>
         <div class="quick-grid" aria-label="Бързи действия">
           <button id="quick-add" class="primary" type="button">＋ Зареждане</button>
           <button id="quick-expense" class="secondary" type="button">＋ Разход</button>
